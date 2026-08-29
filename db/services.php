@@ -15,29 +15,32 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * services for the quizanalytics gradebook report
+ * Services for the quizanalytics gradebook report.
+ *
  * @package   gradereport_quizanalytics
- * @author DualCube <admin@dualcube.com>
- * @copyright  Dualcube (https://dualcube.com)
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @author    DualCube <admin@dualcube.com>
+ * @copyright Dualcube (https://dualcube.com)
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
 defined('MOODLE_INTERNAL') || die();
-$services = array(
-    'moodle_gradereport_quizanalytics' => array(
-        'functions' => array('moodle_quizanalytics_analytic'),
+
+$services = [
+    'moodle_gradereport_quizanalytics' => [
+        'functions' => ['moodle_quizanalytics_analytic'],
         'requiredcapability' => '',
         'restrictedusers' => 0,
         'enabled' => 1,
-    )
-);
-$functions = array(
-    'moodle_quizanalytics_analytic' => array(
-        'classname' => 'moodle_gradereport_quizanalytics_external',
-        'methodname' => 'quizanalytics_analytic',
-        'classpath' => 'grade/report/quizanalytics/externallib.php',
+    ],
+];
+
+$functions = [
+    'moodle_quizanalytics_analytic' => [
+        'classname' => 'gradereport_quizanalytics\external\get_analytics',
+        'methodname' => 'execute',
         'description' => 'Get Analytics data',
         'type' => 'read',
         'ajax' => true,
-        'loginrequired' => true
-    )
-);
+        'loginrequired' => true,
+    ],
+];

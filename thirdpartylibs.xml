@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!DOCTYPE lib SYSTEM "http://get.moodle.org/dtd/thirdpartylibs.dtd">
+<libraries>
+  <library>
+    <location>js/Chart.js</location>
+    <name>Chart.js</name>
+    <version>2.6.0</version>
+    <license>MIT</license>
+    <licenseversion></licenseversion>
+  </library>
+  <library>
+    <location>amd/src/datatables.js</location>
+    <name>DataTables</name>
+    <version>1.13.6</version>
+    <license>MIT</license>
+    <licenseversion></licenseversion>
+  </library>
+</libraries>

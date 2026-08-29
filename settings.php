@@ -15,15 +15,15 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Defines site settings for the quizanalytics gradebook report
+ * Defines site settings for the quizanalytics gradebook report.
  *
  * @package   gradereport_quizanalytics
- * @author DualCube <admin@dualcube.com>
+ * @author    DualCube <admin@dualcube.com>
  * @copyright Dualcube (https://dualcube.com)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die;
+defined('MOODLE_INTERNAL') || die();
 
 if (is_siteadmin()) {
     $settings->add(
