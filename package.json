@@ -1,7 +1,9 @@
 {
   "name": "moodle-gradereport-quizanalytics",
-  "version": "2.4.1",
+  "version": "2.4.4",
   "devDependencies": {
+    "chart.js": "4.5.1",
+    "datatables.net": "3.0.2",
     "grunt": "^1.6.1",
     "terser": "^5.31.0"
   },

@@ -263,7 +263,6 @@ function gradereport_quizanalytics_before_footer() {
 
     $PAGE->requires->css('/grade/report/quizanalytics/css/frontend.css', true);
     $PAGE->requires->css('/grade/report/quizanalytics/css/datatables.css', true);
-    $PAGE->requires->js('/grade/report/quizanalytics/js/Chart.js', true);
     $PAGE->requires->js_call_amd('gradereport_quizanalytics/analytic', 'analytic');
 
     $link = '<a href="#" id="viewanalytic" class="viewanalytic" data-url="' . $CFG->wwwroot

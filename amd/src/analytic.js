@@ -20,8 +20,86 @@
  * @copyright  Dualcube (https://dualcube.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables'], function ($, ajax, str) {
+define(
+    ['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/chart', 'gradereport_quizanalytics/datatables'],
+    function ($, ajax, str, Chart) {
     'use strict';
+
+    // Chart.js v4 moved several v2 option keys to new homes (legend/title now live under
+    // plugins, axis config is keyed by x/y instead of xAxes/yAxes arrays). The server (see
+    // get_analytics.php) still sends v2-shaped options, so this translates them to v4's shape
+    // before they're deep-merged with this file's own v4-format per-chart overrides below.
+    // Keeping the translation here, rather than reshaping every option array in PHP, keeps all
+    // Chart.js-version-specific logic in the one file that actually loads the library.
+    function toV4ChartOptions(v2opt) {
+        var v4opt = $.extend(true, {}, v2opt || {});
+        var plugins = v4opt.plugins || {};
+        if (v4opt.legend !== undefined) {
+            plugins.legend = v4opt.legend;
+            delete v4opt.legend;
+        }
+        if (v4opt.title !== undefined) {
+            plugins.title = v4opt.title;
+            delete v4opt.title;
+        }
+        if (v4opt.showTooltips !== undefined) {
+            plugins.tooltip = $.extend({enabled: v4opt.showTooltips}, plugins.tooltip);
+            delete v4opt.showTooltips;
+        }
+        v4opt.plugins = plugins;
+
+        if (v4opt.scales && (v4opt.scales.xAxes || v4opt.scales.yAxes)) {
+            var scales = {};
+            (v4opt.scales.xAxes || []).forEach(function (axis) {
+                scales.x = toV4Axis(axis);
+            });
+            (v4opt.scales.yAxes || []).forEach(function (axis) {
+                scales.y = toV4Axis(axis);
+            });
+            v4opt.scales = scales;
+        }
+        return v4opt;
+    }
+
+    function toV4Axis(axis) {
+        axis = $.extend(true, {}, axis);
+        if (axis.scaleLabel) {
+            axis.title = {
+                display: axis.scaleLabel.display,
+                text: axis.scaleLabel.labelString,
+            };
+            delete axis.scaleLabel;
+        }
+        if (axis.ticks) {
+            if (axis.ticks.beginAtZero !== undefined) {
+                axis.beginAtZero = axis.ticks.beginAtZero;
+                delete axis.ticks.beginAtZero;
+            }
+            if (axis.ticks.max !== undefined) {
+                axis.max = axis.ticks.max;
+                delete axis.ticks.max;
+            }
+            if (axis.ticks.min !== undefined) {
+                axis.min = axis.ticks.min;
+                delete axis.ticks.min;
+            }
+        }
+        return axis;
+    }
+
+    // v3+ dropped Chart.prototype.generateLegend() entirely, so the clickable per-slice legend
+    // under the doughnut/pie charts below is now built by hand from the chart's own data.
+    function buildSliceLegendHtml(chart) {
+        var dataset = chart.data.datasets[0];
+        var colors = dataset.backgroundColor;
+        var html = '<ul>';
+        chart.data.labels.forEach(function (label, index) {
+            var color = Array.isArray(colors) ? colors[index] : colors;
+            html += '<li><span style="background-color:' + color + '"></span>' + label + '</li>';
+        });
+        html += '</ul>';
+        return html;
+    }
 
     return {
         init: function () {
@@ -33,11 +111,12 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
         analytic: function () {
             var userID, lastAttemptSummary, loggedInUser, mixChart, allUsers,questionPerCategories, timeChart, gradeAnalysis, quesAnalysis, hardestQuestions, allQuestions, rooturl, lastUserQuizAttemptID;
             var attemptsSnapshotArray = [];
-            Chart.plugins.register({
-                beforeDraw: function (chartInstance) {
-                    var chartConvention = chartInstance.chart.ctx;
+            Chart.register({
+                id: 'quizanalyticsCanvasBackground',
+                beforeDraw: function (chart) {
+                    var chartConvention = chart.ctx;
                     chartConvention.fillStyle = "white";
-                    chartConvention.fillRect(0, 0, chartInstance.chart.width, chartInstance.chart.height);
+                    chartConvention.fillRect(0, 0, chart.width, chart.height);
                 }
             });
             const userSelects = document.querySelectorAll('.userSelect');
@@ -159,16 +238,18 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                 $('.attemptssnapshot').html('');
                                 $.each(totalData.attemptssnapshot.data, function (key, value) {
                                     var option = {
-                                        tooltips: {
-                                            callbacks: {
-                                                // use label callback to return the desired label
-                                                label: function (tooltipItem, data) {
-                                                    return " " + data.labels[tooltipItem.index] + " : " + data.datasets[0].data[tooltipItem.index];
+                                        plugins: {
+                                            tooltip: {
+                                                callbacks: {
+                                                    // use label callback to return the desired label
+                                                    label: function (context) {
+                                                        return " " + context.label + " : " + context.parsed;
+                                                    }
                                                 }
                                             }
                                         },
                                     };
-                                    var Options = $.extend(totalData.attemptssnapshot.opt[key], option);
+                                    var Options = $.extend(true, {}, toV4ChartOptions(totalData.attemptssnapshot.opt[key]), option);
                                     $('.attemptssnapshot').append('<label><canvas id="attemptssnapshot' + key + '"></canvas><div id="js-legend' + key + '" class="chart-legend"></div></label><div class="download"><a class="download-canvas" data-canvas_id="attemptssnapshot' + key + '"></a></div>');
                                     var chartConvention = document.getElementById("attemptssnapshot" + key).getContext('2d');
                                     var attemptsSnapshot = new Chart(chartConvention, {
@@ -176,15 +257,11 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                         data: totalData.attemptssnapshot.data[key],
                                         options: Options,
                                     });
-                                    document.getElementById('js-legend' + key).innerHTML = attemptsSnapshot.generateLegend();
-                                    $('#js-legend' + key).find('ul').find('li').on("click", function (snaplegende) {
+                                    document.getElementById('js-legend' + key).innerHTML = buildSliceLegendHtml(attemptsSnapshot);
+                                    $('#js-legend' + key).find('ul').find('li').on("click", function () {
                                         var index = $(this).index();
                                         $(this).toggleClass("strike");
-                                        function first(p) {
-                                            for (var i in p) { return p[i] };
-                                        }
-                                        var currentTab = first(attemptsSnapshot.config.data.datasets[0]._meta).data[index];
-                                        currentTab.hidden = !currentTab.hidden
+                                        attemptsSnapshot.toggleDataVisibility(index);
                                         attemptsSnapshot.update();
                                     });
                                     attemptsSnapshotArray.push(attemptsSnapshot);
@@ -197,46 +274,49 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                     questionPerCategories.destroy();
                                 }
                                 var option = {
-                                    tooltips: {
-                                        callbacks: {
-                                            // use label callback to return the desired label
-                                            label: function (tooltipItem, data) {
-                                                return " " + data.labels[tooltipItem.index] + " : " + data.datasets[0].data[tooltipItem.index];
+                                    plugins: {
+                                        tooltip: {
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (context) {
+                                                    return " " + context.label + " : " + context.parsed;
+                                                }
                                             }
                                         }
                                     },
                                 };
-                                var Options = $.extend(totalData.questionPerCategories.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.questionPerCategories.opt), option);
                                 questionPerCategories = new Chart(chartConvention, {
                                     type: 'pie',
                                     data: totalData.questionPerCategories.data,
                                     options: Options,
                                 });
-                                document.getElementById('js-legendqpc').innerHTML = questionPerCategories.generateLegend();
-                                $("#js-legendqpc > ul > li").on("click", function (legende) {
+                                document.getElementById('js-legendqpc').innerHTML = buildSliceLegendHtml(questionPerCategories);
+                                $("#js-legendqpc > ul > li").on("click", function () {
                                     var index = $(this).index();
                                     $(this).toggleClass("strike");
-                                    function first(p) {
-                                        for (var i in p) { return p[i] };
-                                    }
-                                    var currentTab = first(questionPerCategories.config.data.datasets[0]._meta).data[index];
-                                    currentTab.hidden = !currentTab.hidden
+                                    questionPerCategories.toggleDataVisibility(index);
                                     questionPerCategories.update();
                                 });
                             }
                             var canvasAllUsers = document.getElementById("allusers");
                             if (canvasAllUsers) {
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
+                                            displayColors: false
                                         }
                                     },
-                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[2] }, ticks: { beginAtZero: true, max: 100, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                    scales: {
+                                        x: { title: { display: true, text: s[1] } },
+                                        y: {
+                                            title: { display: true, text: s[2] }, beginAtZero: true, max: 100,
+                                            ticks: { callback: function (value) { if (Number.isInteger(value)) { return value; } } }
+                                        }
+                                    }
                                 };
-                                var Options = $.extend(totalData.allUsers.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.allUsers.opt), option);
                                 var chartConvention = canvasAllUsers.getContext('2d');
                                 if (allUsers !== undefined) {
                                     allUsers.destroy();
@@ -250,16 +330,21 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                             var canvasLoggedInUser = document.getElementById("loggedinuser");
                             if (canvasLoggedInUser) {
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
+                                            displayColors: false
                                         }
                                     },
-                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[2] }, ticks: { beginAtZero: true, max: 100, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                    scales: {
+                                        x: { title: { display: true, text: s[1] } },
+                                        y: {
+                                            title: { display: true, text: s[2] }, beginAtZero: true, max: 100,
+                                            ticks: { callback: function (value) { if (Number.isInteger(value)) { return value; } } }
+                                        }
+                                    }
                                 };
-                                var Options = $.extend(totalData.loggedInUser.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.loggedInUser.opt), option);
                                 var chartConvention = canvasLoggedInUser.getContext('2d');
                                 if (loggedInUser !== undefined) {
                                     loggedInUser.destroy();
@@ -281,27 +366,29 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                         lastAttemptSummary.destroy();
                                     }
                                     var option = {
-                                        tooltips: {
-                                            custom: function (tooltip) {
-                                                if (!tooltip) return;
+                                        // 'horizontalBar' was removed in Chart.js v3+ - a horizontal bar chart is
+                                        // now a regular 'bar' chart with the index axis switched to 'y'.
+                                        indexAxis: 'y',
+                                        plugins: {
+                                            tooltip: {
                                                 // disable displaying the color box;
-                                                tooltip.displayColors = false;
-                                            },
-                                            callbacks: {
-                                                // use label callback to return the desired label
-                                                label: function (tooltipItem, data) {
-                                                    return tooltipItem.yLabel + " : " + tooltipItem.xLabel;
-                                                },
-                                                // remove title
-                                                title: function (tooltipItem, data) {
-                                                    return;
+                                                displayColors: false,
+                                                callbacks: {
+                                                    // use label callback to return the desired label
+                                                    label: function (context) {
+                                                        return context.label + " : " + context.parsed.x;
+                                                    },
+                                                    // remove title
+                                                    title: function () {
+                                                        return '';
+                                                    }
                                                 }
                                             }
                                         }
                                     };
-                                    var Options = $.extend(totalData.lastAttemptSummary.opt, option);
+                                    var Options = $.extend(true, {}, toV4ChartOptions(totalData.lastAttemptSummary.opt), option);
                                     lastAttemptSummary = new Chart(chartConvention1, {
-                                        type: 'horizontalBar',
+                                        type: 'bar',
                                         data: totalData.lastAttemptSummary.data,
                                         options: Options
                                     });
@@ -314,26 +401,30 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                             var canvasMixchart = document.getElementById("mixchart");
                             if (canvasMixchart) {
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
-                                        },
-                                        callbacks: {
-                                            // use label callback to return the desired label
-                                            label: function (tooltipItem, data) {
-                                                return tooltipItem.yLabel + " : " + tooltipItem.xLabel;
-                                            },
-                                            // remove title
-                                            title: function (tooltipItem, data) {
-                                                return;
+                                            displayColors: false,
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (context) {
+                                                    return context.parsed.y + " : " + context.label;
+                                                },
+                                                // remove title
+                                                title: function () {
+                                                    return '';
+                                                }
                                             }
                                         }
                                     },
-                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[5] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                    scales: {
+                                        x: {
+                                            title: { display: true, text: s[5] }, beginAtZero: true,
+                                            ticks: { callback: function (value) { if (Number.isInteger(value)) { return value; } } }
+                                        }
+                                    }
                                 };
-                                var Options = $.extend(totalData.mixChart.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.mixChart.opt), option);
                                 var chartConvention = canvasMixchart.getContext('2d');
                                 if (mixChart !== undefined) {
                                     mixChart.destroy();
@@ -347,32 +438,40 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                             var canvasTimechart = document.getElementById("timechart");
                             if (canvasTimechart) {
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    // 'horizontalBar' was removed in Chart.js v3+ - a horizontal bar chart is
+                                    // now a regular 'bar' chart with the index axis switched to 'y'.
+                                    indexAxis: 'y',
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
-                                        },
-                                        callbacks: {
-                                            // use label callback to return the desired label
-                                            label: function (tooltipItem, data) {
-                                                return data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel;
-                                            },
-                                            // remove title
-                                            title: function (tooltipItem, data) {
-                                                return;
+                                            displayColors: false,
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (context) {
+                                                    return context.dataset.label + " : " + context.label;
+                                                },
+                                                // remove title
+                                                title: function () {
+                                                    return '';
+                                                }
                                             }
                                         }
                                     },
-                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[3] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[4] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                    scales: {
+                                        x: { title: { display: true, text: s[3] } },
+                                        y: {
+                                            title: { display: true, text: s[4] }, beginAtZero: true,
+                                            ticks: { callback: function (value) { if (Number.isInteger(value)) { return value; } } }
+                                        }
+                                    }
                                 };
-                                var Options = $.extend(totalData.timeChart.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.timeChart.opt), option);
                                 var chartConvention = canvasTimechart.getContext('2d');
                                 if (timeChart !== undefined) {
                                     timeChart.destroy();
                                 }
                                 timeChart = new Chart(chartConvention, {
-                                    type: 'horizontalBar',
+                                    type: 'bar',
                                     data: totalData.timeChart.data,
                                     options: Options
                                 });
@@ -384,35 +483,30 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                     gradeAnalysis.destroy();
                                 }
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
-                                        },
-                                        callbacks: {
-                                            // use label callback to return the desired label
-                                            label: function (tooltipItem, data) {
-                                                return "Percentage Scored (" + data.labels[tooltipItem.index] + ") : " + data.datasets[0].data[tooltipItem.index];
+                                            displayColors: false,
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (context) {
+                                                    return "Percentage Scored (" + context.label + ") : " + context.parsed;
+                                                }
                                             }
                                         }
                                     }
                                 };
-                                var Options = $.extend(totalData.gradeAnalysis.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.gradeAnalysis.opt), option);
                                 gradeAnalysis = new Chart(chartConvention, {
                                     type: 'pie',
                                     data: totalData.gradeAnalysis.data,
                                     options: Options
                                 });
-                                document.getElementById('js-legendgrade').innerHTML = gradeAnalysis.generateLegend();
-                                $("#js-legendgrade > ul > li").on("click", function (legendgrade) {
+                                document.getElementById('js-legendgrade').innerHTML = buildSliceLegendHtml(gradeAnalysis);
+                                $("#js-legendgrade > ul > li").on("click", function () {
                                     var index = $(this).index();
                                     $(this).toggleClass("strike");
-                                    function first(p) {
-                                        for (var i in p) { return p[i] };
-                                    }
-                                    var currentTab = first(gradeAnalysis.config.data.datasets[0]._meta).data[index];
-                                    currentTab.hidden = !currentTab.hidden
+                                    gradeAnalysis.toggleDataVisibility(index);
                                     gradeAnalysis.update();
                                 });
                             }
@@ -423,23 +517,28 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                     quesAnalysis.destroy();
                                 }
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
-                                        },
-                                        callbacks: {
-                                            // use label callback to return the desired label
-                                            label: function (tooltipItem, data) {
-                                                return [data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel, s[7]];
+                                            displayColors: false,
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (context) {
+                                                    return [context.dataset.label + " : " + context.parsed.y, s[7]];
 
+                                                }
                                             }
                                         }
                                     },
-                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[6] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[3] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                    scales: {
+                                        x: { title: { display: true, text: s[6] } },
+                                        y: {
+                                            title: { display: true, text: s[3] }, beginAtZero: true,
+                                            ticks: { callback: function (value) { if (Number.isInteger(value)) { return value; } } }
+                                        }
+                                    }
                                 };
-                                var Options = $.extend(totalData.quesAnalysis.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.quesAnalysis.opt), option);
 
                                 quesAnalysis = new Chart(chartConvention, {
                                     type: 'line',
@@ -450,27 +549,32 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                             var canvasHardestQuestionsChart = document.getElementById("hardest-questions");
                             if (canvasHardestQuestionsChart) {
                                 var option = {
-                                    tooltips: {
-                                        custom: function (tooltip) {
-                                            if (!tooltip) return;
+                                    plugins: {
+                                        tooltip: {
                                             // disable displaying the color box;
-                                            tooltip.displayColors = false;
-                                        },
-                                        callbacks: {
-                                            // use label callback to return the desired label
-                                            label: function (tooltipItem, data) {
-                                                return [data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel, s[7]];
+                                            displayColors: false,
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (context) {
+                                                    return [context.dataset.label + " : " + context.parsed.y, s[7]];
 
-                                            },
-                                            // remove title
-                                            title: function (tooltipItem, data) {
-                                                return;
+                                                },
+                                                // remove title
+                                                title: function () {
+                                                    return '';
+                                                }
                                             }
                                         }
                                     },
-                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[3] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                    scales: {
+                                        x: { title: { display: true, text: s[1] } },
+                                        y: {
+                                            title: { display: true, text: s[3] }, beginAtZero: true,
+                                            ticks: { callback: function (value) { if (Number.isInteger(value)) { return value; } } }
+                                        }
+                                    }
                                 };
-                                var Options = $.extend(totalData.hardestQuestions.opt, option);
+                                var Options = $.extend(true, {}, toV4ChartOptions(totalData.hardestQuestions.opt), option);
                                 var chartConvention = canvasHardestQuestionsChart.getContext('2d');
                                 if (hardestQuestions !== undefined) {
                                     hardestQuestions.destroy();
@@ -487,10 +591,15 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                 var canvasQuestionAnalysis = document.getElementById("questionanalysis");
                 if (canvasQuestionAnalysis) {
                     canvasQuestionAnalysis.onclick = function (questionevent) {
-                        var activePoints = quesAnalysis.getElementsAtEvent(questionevent);
-                        var chartData = activePoints[0]['_chart'].config.data;
-                        var idx = activePoints[0]['_index'];
-                        var label = chartData.labels[idx];
+                        // getElementsAtEvent() was removed in Chart.js v3+; getElementsAtEventForMode()
+                        // with mode 'index' is the documented replacement for its "same index across
+                        // datasets" behaviour, and elements now expose a plain .index property.
+                        var activePoints = quesAnalysis.getElementsAtEventForMode(questionevent, 'index', {intersect: true}, false);
+                        if (!activePoints.length) {
+                            return;
+                        }
+                        var idx = activePoints[0].index;
+                        var label = quesAnalysis.data.labels[idx];
                         if (allQuestions !== undefined) {
                             var quesPage = 0;
                             $.each(allQuestions, function (i, quesid) {
@@ -515,10 +624,15 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                 var canvasHardestQuestions = document.getElementById("hardest-questions");
                 if (canvasHardestQuestions) {
                     canvasHardestQuestions.onclick = function (questionevent) {
-                        var activePoints = hardestQuestions.getElementsAtEvent(questionevent);
-                        var chartData = activePoints[0]['_chart'].config.data;
-                        var idx = activePoints[0]['_index'];
-                        var label = chartData.labels[idx];
+                        // getElementsAtEvent() was removed in Chart.js v3+; getElementsAtEventForMode()
+                        // with mode 'index' is the documented replacement for its "same index across
+                        // datasets" behaviour, and elements now expose a plain .index property.
+                        var activePoints = hardestQuestions.getElementsAtEventForMode(questionevent, 'index', {intersect: true}, false);
+                        if (!activePoints.length) {
+                            return;
+                        }
+                        var idx = activePoints[0].index;
+                        var label = hardestQuestions.data.labels[idx];
                         if (allQuestions !== undefined) {
                             var quesPage = 0;
                             $.each(allQuestions, function (i, quesid) {

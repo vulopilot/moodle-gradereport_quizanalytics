@@ -33,7 +33,6 @@ $userid = optional_param('userid', $USER->id, PARAM_INT);
 $PAGE->set_url(new moodle_url($CFG->wwwroot . '/grade/report/quizanalytics/index.php', ['id' => $courseid]));
 $PAGE->requires->css('/grade/report/quizanalytics/css/frontend.css', true);
 $PAGE->requires->css('/grade/report/quizanalytics/css/datatables.css', true);
-$PAGE->requires->js('/grade/report/quizanalytics/js/Chart.js', true);
 $PAGE->requires->js_call_amd('gradereport_quizanalytics/analytic', 'analytic');
 $PAGE->requires->js_call_amd('gradereport_quizanalytics/analytic', 'init');
 

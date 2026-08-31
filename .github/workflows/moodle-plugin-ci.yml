@@ -22,7 +22,11 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.4']
-        moodle-branch: ['MOODLE_500_STABLE']
+        # main tracks Moodle's current dev integration branch (5.3dev as of this writing,
+        # code-frozen 2026-08-31 ahead of its October 2026 release) - keeping it in the
+        # matrix alongside the latest stable branch catches incompatibilities with the
+        # upcoming release automatically instead of only finding out after it ships.
+        moodle-branch: ['MOODLE_500_STABLE', 'main']
         database: [mariadb]
 
     steps:
