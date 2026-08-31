@@ -40,11 +40,11 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                     chartConvention.fillRect(0, 0, chartInstance.chart.width, chartInstance.chart.height);
                 }
             });
-            const userSelects = document.querySelectorAll('#userSelect');
+            const userSelects = document.querySelectorAll('.userSelect');
             const viewAnalyticsLinks = document.querySelectorAll(".viewanalytic");
             userSelects.forEach((userSelect) => {
                 const viewAnalyticsLink = userSelect.parentNode.parentNode.querySelector(".viewanalytic");
-                // Dynamic styling for viewanalytics link based on #userSelect
+                // Dynamic styling for viewanalytics link based on .userSelect
                 if (viewAnalyticsLink && userSelect) {
                     userSelect.addEventListener("change", function () {
                         if (userSelect.value === '-1') {
@@ -61,12 +61,13 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
             $(".viewanalytic").click(function () {
                 var quizid = $(this).data('quiz_id');
                 const [viewAnalytics] = $(this);
-                const userSelect = viewAnalytics.parentNode.parentNode.querySelector("#userSelect");
-                userID = userSelect ? userSelect.value : -1;
+                const userSelect = viewAnalytics.parentNode.parentNode.querySelector(".userSelect");
+                const linkuserid = $(this).data('user_id');
+                userID = userSelect ? userSelect.value : (linkuserid !== undefined ? linkuserid : -1);
                 var promises = ajax.call([
                     {
                         methodname: 'moodle_quizanalytics_analytic',
-                        args: { 
+                        args: {
                             quizid: quizid,
                             user_id: userID
                         },
@@ -74,7 +75,7 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                 ]);
                 promises[0].done(function (data) {
                     var totalData = JSON.parse(data);
-                    if (totalData) {    
+                    if (totalData) {
                         var stringFetch =[
                                 {key:'zeroattempt', component:'gradereport_quizanalytics'},
                                 {key:'hardestcategories', component:'gradereport_quizanalytics'},
@@ -91,7 +92,7 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                         if(totalData.url)
                         rooturl = totalData.url;
                         if(totalData.lastUserQuizAttemptID)
-                        lastUserQuizAttemptID = totalData.lastUserQuizAttemptID; 
+                        lastUserQuizAttemptID = totalData.lastUserQuizAttemptID;
                         $("#page-grade-report-quizanalytics-index").find(".btn-navbar").on("click",function() {
                             $(this).toggleClass("active-drop");
                             if ($(this).hasClass("active-drop")) {
@@ -112,7 +113,7 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                             event.preventDefault();
                             event.stopPropagation();
                             window.open($(this).attr('href'), '_self');
-                        }); 
+                        });
                         $(".showanalytics").find(".parentTabs").find("span.last-attempt").hide();
                         $(".showanalytics").find("#tabs-1").find("p.last-attempt-des").hide();
                         $(".showanalytics").find("#tabs-1").find("p.attempt-des").show();
@@ -152,8 +153,49 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                             });
                         }
                         str.get_strings(stringFetch).done(function(s){
-                            $('.attemptssnapshot').html('');
-                            $.each(totalData.attemptssnapshot.data, function (key, value) {
+                            // Every canvas below belongs to a tab that can be turned off via the plugin's
+                            // "Visible analytics" settings, so each block only runs if its canvas exists.
+                            if ($('.attemptssnapshot').length) {
+                                $('.attemptssnapshot').html('');
+                                $.each(totalData.attemptssnapshot.data, function (key, value) {
+                                    var option = {
+                                        tooltips: {
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (tooltipItem, data) {
+                                                    return " " + data.labels[tooltipItem.index] + " : " + data.datasets[0].data[tooltipItem.index];
+                                                }
+                                            }
+                                        },
+                                    };
+                                    var Options = $.extend(totalData.attemptssnapshot.opt[key], option);
+                                    $('.attemptssnapshot').append('<label><canvas id="attemptssnapshot' + key + '"></canvas><div id="js-legend' + key + '" class="chart-legend"></div></label><div class="download"><a class="download-canvas" data-canvas_id="attemptssnapshot' + key + '"></a></div>');
+                                    var chartConvention = document.getElementById("attemptssnapshot" + key).getContext('2d');
+                                    var attemptsSnapshot = new Chart(chartConvention, {
+                                        type: 'doughnut',
+                                        data: totalData.attemptssnapshot.data[key],
+                                        options: Options,
+                                    });
+                                    document.getElementById('js-legend' + key).innerHTML = attemptsSnapshot.generateLegend();
+                                    $('#js-legend' + key).find('ul').find('li').on("click", function (snaplegende) {
+                                        var index = $(this).index();
+                                        $(this).toggleClass("strike");
+                                        function first(p) {
+                                            for (var i in p) { return p[i] };
+                                        }
+                                        var currentTab = first(attemptsSnapshot.config.data.datasets[0]._meta).data[index];
+                                        currentTab.hidden = !currentTab.hidden
+                                        attemptsSnapshot.update();
+                                    });
+                                    attemptsSnapshotArray.push(attemptsSnapshot);
+                                });
+                            }
+                            var canvasQuestionPerCategories = document.getElementById("questionpercategories");
+                            if (canvasQuestionPerCategories) {
+                                var chartConvention = canvasQuestionPerCategories.getContext('2d');
+                                if (questionPerCategories !== undefined) {
+                                    questionPerCategories.destroy();
+                                }
                                 var option = {
                                     tooltips: {
                                         callbacks: {
@@ -164,107 +206,113 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                         }
                                     },
                                 };
-                                var Options = $.extend(totalData.attemptssnapshot.opt[key], option);
-                                $('.attemptssnapshot').append('<label><canvas id="attemptssnapshot' + key + '"></canvas><div id="js-legend' + key + '" class="chart-legend"></div></label><div class="download"><a class="download-canvas" data-canvas_id="attemptssnapshot' + key + '"></a></div>');
-                                var chartConvention = document.getElementById("attemptssnapshot" + key).getContext('2d');
-                                var attemptsSnapshot = new Chart(chartConvention, {
-                                    type: 'doughnut',
-                                    data: totalData.attemptssnapshot.data[key],
+                                var Options = $.extend(totalData.questionPerCategories.opt, option);
+                                questionPerCategories = new Chart(chartConvention, {
+                                    type: 'pie',
+                                    data: totalData.questionPerCategories.data,
                                     options: Options,
                                 });
-                                document.getElementById('js-legend' + key).innerHTML = attemptsSnapshot.generateLegend();
-                                $('#js-legend' + key).find('ul').find('li').on("click", function (snaplegende) {
+                                document.getElementById('js-legendqpc').innerHTML = questionPerCategories.generateLegend();
+                                $("#js-legendqpc > ul > li").on("click", function (legende) {
                                     var index = $(this).index();
                                     $(this).toggleClass("strike");
                                     function first(p) {
                                         for (var i in p) { return p[i] };
                                     }
-                                    var currentTab = first(attemptsSnapshot.config.data.datasets[0]._meta).data[index];
+                                    var currentTab = first(questionPerCategories.config.data.datasets[0]._meta).data[index];
                                     currentTab.hidden = !currentTab.hidden
-                                    attemptsSnapshot.update();
+                                    questionPerCategories.update();
                                 });
-                                attemptsSnapshotArray.push(attemptsSnapshot);
-                            });
-                            var chartConvention = document.getElementById("questionpercategories").getContext('2d');
-                            if (questionPerCategories !== undefined) {
-                                questionPerCategories.destroy();
                             }
-                            var option = {
-                                tooltips: {
-                                    callbacks: {
-                                        // use label callback to return the desired label
-                                        label: function (tooltipItem, data) {
-                                            return " " + data.labels[tooltipItem.index] + " : " + data.datasets[0].data[tooltipItem.index];
+                            var canvasAllUsers = document.getElementById("allusers");
+                            if (canvasAllUsers) {
+                                var option = {
+                                    tooltips: {
+                                        custom: function (tooltip) {
+                                            if (!tooltip) return;
+                                            // disable displaying the color box;
+                                            tooltip.displayColors = false;
                                         }
-                                    }
-                                },
-                            };
-                            var Options = $.extend(totalData.questionPerCategories.opt, option);
-                            questionPerCategories = new Chart(chartConvention, {
-                                type: 'pie',
-                                data: totalData.questionPerCategories.data,
-                                options: Options,
-                            });
-                            document.getElementById('js-legendqpc').innerHTML = questionPerCategories.generateLegend();
-                            $("#js-legendqpc > ul > li").on("click", function (legende) {
-                                var index = $(this).index();
-                                $(this).toggleClass("strike");
-                                function first(p) {
-                                    for (var i in p) { return p[i] };
+                                    },
+                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[2] }, ticks: { beginAtZero: true, max: 100, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                };
+                                var Options = $.extend(totalData.allUsers.opt, option);
+                                var chartConvention = canvasAllUsers.getContext('2d');
+                                if (allUsers !== undefined) {
+                                    allUsers.destroy();
                                 }
-                                var currentTab = first(questionPerCategories.config.data.datasets[0]._meta).data[index];
-                                currentTab.hidden = !currentTab.hidden
-                                questionPerCategories.update();
-                            }); 
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
-                                    }
-                                },
-                                scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[2] }, ticks: { beginAtZero: true, max: 100, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
-                            }; 
-                            var Options = $.extend(totalData.allUsers.opt, option);
-                            var chartConvention = document.getElementById("allusers").getContext('2d');
-                            if (allUsers !== undefined) {
-                                allUsers.destroy();
+                                allUsers = new Chart(chartConvention, {
+                                    type: 'bar',
+                                    data: totalData.allUsers.data,
+                                    options: Options
+                                });
                             }
-                            allUsers = new Chart(chartConvention, {
-                                type: 'bar',
-                                data: totalData.allUsers.data,
-                                options: Options
-                            });
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
-                                    }
-                                },
-                                scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[2] }, ticks: { beginAtZero: true, max: 100, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
-                            };
-                            var Options = $.extend(totalData.loggedInUser.opt, option);
-                            var chartConvention = document.getElementById("loggedinuser").getContext('2d');
-                            if (loggedInUser !== undefined) {
-                                loggedInUser.destroy();
-                            }
-                            loggedInUser = new Chart(chartConvention, {
-                                type: 'bar',
-                                data: totalData.loggedInUser.data,
-                                options: Options
-                            });
-                            if (totalData.lastAttemptSummary.data != null && totalData.lastAttemptSummary.opt != null) {
-                                $(".showanalytics").find(".unattempted").hide();
-                                $(".showanalytics").find("#lastAttempt").show();
-                                var chartConvention = document.getElementById("lastAttempt");
-                                chartConvention.height = 100;
-                                var chartConvention1 = chartConvention.getContext('2d');
-                                if (lastAttemptSummary !== undefined) {
-                                    lastAttemptSummary.destroy();
+                            var canvasLoggedInUser = document.getElementById("loggedinuser");
+                            if (canvasLoggedInUser) {
+                                var option = {
+                                    tooltips: {
+                                        custom: function (tooltip) {
+                                            if (!tooltip) return;
+                                            // disable displaying the color box;
+                                            tooltip.displayColors = false;
+                                        }
+                                    },
+                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[2] }, ticks: { beginAtZero: true, max: 100, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                };
+                                var Options = $.extend(totalData.loggedInUser.opt, option);
+                                var chartConvention = canvasLoggedInUser.getContext('2d');
+                                if (loggedInUser !== undefined) {
+                                    loggedInUser.destroy();
                                 }
+                                loggedInUser = new Chart(chartConvention, {
+                                    type: 'bar',
+                                    data: totalData.loggedInUser.data,
+                                    options: Options
+                                });
+                            }
+                            var canvasLastAttempt = document.getElementById("lastAttempt");
+                            if (canvasLastAttempt) {
+                                if (totalData.lastAttemptSummary.data != null && totalData.lastAttemptSummary.opt != null) {
+                                    $(".showanalytics").find(".unattempted").hide();
+                                    $(".showanalytics").find("#lastAttempt").show();
+                                    canvasLastAttempt.height = 100;
+                                    var chartConvention1 = canvasLastAttempt.getContext('2d');
+                                    if (lastAttemptSummary !== undefined) {
+                                        lastAttemptSummary.destroy();
+                                    }
+                                    var option = {
+                                        tooltips: {
+                                            custom: function (tooltip) {
+                                                if (!tooltip) return;
+                                                // disable displaying the color box;
+                                                tooltip.displayColors = false;
+                                            },
+                                            callbacks: {
+                                                // use label callback to return the desired label
+                                                label: function (tooltipItem, data) {
+                                                    return tooltipItem.yLabel + " : " + tooltipItem.xLabel;
+                                                },
+                                                // remove title
+                                                title: function (tooltipItem, data) {
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    };
+                                    var Options = $.extend(totalData.lastAttemptSummary.opt, option);
+                                    lastAttemptSummary = new Chart(chartConvention1, {
+                                        type: 'horizontalBar',
+                                        data: totalData.lastAttemptSummary.data,
+                                        options: Options
+                                    });
+                                }
+                                else {
+                                    $(".showanalytics").find("#lastAttempt").hide();
+                                    $(".showanalytics").find("#lastAttempt").parent().append('<p class="unattempted"><b>' + s[0] + '</b></p>');
+                                }
+                            }
+                            var canvasMixchart = document.getElementById("mixchart");
+                            if (canvasMixchart) {
                                 var option = {
                                     tooltips: {
                                         custom: function (tooltip) {
@@ -282,175 +330,157 @@ define(['jquery', 'core/ajax', 'core/str', 'gradereport_quizanalytics/datatables
                                                 return;
                                             }
                                         }
-                                    }
+                                    },
+                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[5] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
                                 };
-                                var Options = $.extend(totalData.lastAttemptSummary.opt, option);
-                                lastAttemptSummary = new Chart(chartConvention1, {
-                                    type: 'horizontalBar',
-                                    data: totalData.lastAttemptSummary.data,
+                                var Options = $.extend(totalData.mixChart.opt, option);
+                                var chartConvention = canvasMixchart.getContext('2d');
+                                if (mixChart !== undefined) {
+                                    mixChart.destroy();
+                                }
+                                mixChart = new Chart(chartConvention, {
+                                    type: 'line',
+                                    data: totalData.mixChart.data,
                                     options: Options
                                 });
-                            } 
-                            else {
-                                $(".showanalytics").find("#lastAttempt").hide();
-                                $(".showanalytics").find("#lastAttempt").parent().append('<p class="unattempted"><b>' + s[0] + '</b></p>');
                             }
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
-                                    },
-                                    callbacks: {
-                                        // use label callback to return the desired label
-                                        label: function (tooltipItem, data) {
-                                            return data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel;
+                            var canvasTimechart = document.getElementById("timechart");
+                            if (canvasTimechart) {
+                                var option = {
+                                    tooltips: {
+                                        custom: function (tooltip) {
+                                            if (!tooltip) return;
+                                            // disable displaying the color box;
+                                            tooltip.displayColors = false;
                                         },
-                                        // remove title
-                                        title: function (tooltipItem, data) {
-                                            return;
+                                        callbacks: {
+                                            // use label callback to return the desired label
+                                            label: function (tooltipItem, data) {
+                                                return data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel;
+                                            },
+                                            // remove title
+                                            title: function (tooltipItem, data) {
+                                                return;
+                                            }
                                         }
-                                    }
-                                },
-                                scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[3] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[4] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
-                            };
-                            var Options = $.extend(totalData.mixChart.opt, option);
-                            var chartConvention = document.getElementById("mixchart").getContext('2d');
-                            if (mixChart !== undefined) {
-                                mixChart.destroy();
-                            }
-                            mixChart = new Chart(chartConvention, {
-                                type: 'line',
-                                data: totalData.mixChart.data,
-                                options: Options
-                            });
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
                                     },
-                                    callbacks: {
-                                        // use label callback to return the desired label
-                                        label: function (tooltipItem, data) {
-                                            return tooltipItem.yLabel + " : " + tooltipItem.xLabel;
-                                        },
-                                        // remove title
-                                        title: function (tooltipItem, data) {
-                                            return;
-                                        }
-                                    }
-                                },
-                                scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[5] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
-                            };
-                            var Options = $.extend(totalData.timeChart.opt, option);
-                            var chartConvention = document.getElementById("timechart").getContext('2d');
-                            if (timeChart !== undefined) {
-                                timeChart.destroy();
-                            }
-                            timeChart = new Chart(chartConvention, {
-                                type: 'horizontalBar',
-                                data: totalData.timeChart.data,
-                                options: Options
-                            });
-                            var chartConvention = document.getElementById("gradeanalysis").getContext('2d');
-                            if (gradeAnalysis !== undefined) {
-                                gradeAnalysis.destroy();
-                            }
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
-                                    },
-                                    callbacks: {
-                                        // use label callback to return the desired label
-                                        label: function (tooltipItem, data) {
-                                            return "Percentage Scored (" + data.labels[tooltipItem.index] + ") : " + data.datasets[0].data[tooltipItem.index];
-                                        }
-                                    }
+                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[3] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[4] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                };
+                                var Options = $.extend(totalData.timeChart.opt, option);
+                                var chartConvention = canvasTimechart.getContext('2d');
+                                if (timeChart !== undefined) {
+                                    timeChart.destroy();
                                 }
-                            };
-                            var Options = $.extend(totalData.gradeAnalysis.opt, option);
-                            gradeAnalysis = new Chart(chartConvention, {
-                                type: 'pie',
-                                data: totalData.gradeAnalysis.data,
-                                options: Options
-                            });
-                            document.getElementById('js-legendgrade').innerHTML = gradeAnalysis.generateLegend();
-                            $("#js-legendgrade > ul > li").on("click", function (legendgrade) {
-                                var index = $(this).index();
-                                $(this).toggleClass("strike");
-                                function first(p) {
-                                    for (var i in p) { return p[i] };
+                                timeChart = new Chart(chartConvention, {
+                                    type: 'horizontalBar',
+                                    data: totalData.timeChart.data,
+                                    options: Options
+                                });
+                            }
+                            var canvasGradeAnalysis = document.getElementById("gradeanalysis");
+                            if (canvasGradeAnalysis) {
+                                var chartConvention = canvasGradeAnalysis.getContext('2d');
+                                if (gradeAnalysis !== undefined) {
+                                    gradeAnalysis.destroy();
                                 }
-                                var currentTab = first(gradeAnalysis.config.data.datasets[0]._meta).data[index];
-                                currentTab.hidden = !currentTab.hidden
-                                gradeAnalysis.update();
-                            });
-                            var chartConvention = document.getElementById("questionanalysis").getContext('2d');
-                            if (quesAnalysis !== undefined) {
-                                quesAnalysis.destroy();
-                            }
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
-                                    },
-                                    callbacks: {
-                                        // use label callback to return the desired label
-                                        label: function (tooltipItem, data) {
-                                            return [data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel, s[7]];
-                                             
-                                        }
-                                    }
-                                },
-                                scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[6] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[3] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
-                            };
-                            var Options = $.extend(totalData.quesAnalysis.opt, option);
-
-                            quesAnalysis = new Chart(chartConvention, {
-                                type: 'line',
-                                data: totalData.quesAnalysis.data,
-                                options: Options
-                            });
-                            var option = {
-                                tooltips: {
-                                    custom: function (tooltip) {
-                                        if (!tooltip) return;
-                                        // disable displaying the color box;
-                                        tooltip.displayColors = false;
-                                    },
-                                    callbacks: {
-                                        // use label callback to return the desired label
-                                        label: function (tooltipItem, data) {
-                                            return [data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel, s[7]];
-                                            
+                                var option = {
+                                    tooltips: {
+                                        custom: function (tooltip) {
+                                            if (!tooltip) return;
+                                            // disable displaying the color box;
+                                            tooltip.displayColors = false;
                                         },
-                                        // remove title
-                                        title: function (tooltipItem, data) {
-                                            return;
+                                        callbacks: {
+                                            // use label callback to return the desired label
+                                            label: function (tooltipItem, data) {
+                                                return "Percentage Scored (" + data.labels[tooltipItem.index] + ") : " + data.datasets[0].data[tooltipItem.index];
+                                            }
                                         }
                                     }
-                                },
-                                scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[3] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
-                            };
-                            var Options = $.extend(totalData.hardestQuestions.opt, option);
-                            var chartConvention = document.getElementById("hardest-questions").getContext('2d');
-                            if (hardestQuestions !== undefined) {
-                                hardestQuestions.destroy();
+                                };
+                                var Options = $.extend(totalData.gradeAnalysis.opt, option);
+                                gradeAnalysis = new Chart(chartConvention, {
+                                    type: 'pie',
+                                    data: totalData.gradeAnalysis.data,
+                                    options: Options
+                                });
+                                document.getElementById('js-legendgrade').innerHTML = gradeAnalysis.generateLegend();
+                                $("#js-legendgrade > ul > li").on("click", function (legendgrade) {
+                                    var index = $(this).index();
+                                    $(this).toggleClass("strike");
+                                    function first(p) {
+                                        for (var i in p) { return p[i] };
+                                    }
+                                    var currentTab = first(gradeAnalysis.config.data.datasets[0]._meta).data[index];
+                                    currentTab.hidden = !currentTab.hidden
+                                    gradeAnalysis.update();
+                                });
                             }
-                            hardestQuestions = new Chart(chartConvention, {
-                                type: 'bar',
-                                data: totalData.hardestQuestions.data,
-                                options: Options
-                            });
+                            var canvasQuestionAnalysisChart = document.getElementById("questionanalysis");
+                            if (canvasQuestionAnalysisChart) {
+                                var chartConvention = canvasQuestionAnalysisChart.getContext('2d');
+                                if (quesAnalysis !== undefined) {
+                                    quesAnalysis.destroy();
+                                }
+                                var option = {
+                                    tooltips: {
+                                        custom: function (tooltip) {
+                                            if (!tooltip) return;
+                                            // disable displaying the color box;
+                                            tooltip.displayColors = false;
+                                        },
+                                        callbacks: {
+                                            // use label callback to return the desired label
+                                            label: function (tooltipItem, data) {
+                                                return [data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel, s[7]];
 
+                                            }
+                                        }
+                                    },
+                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[6] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[3] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                };
+                                var Options = $.extend(totalData.quesAnalysis.opt, option);
+
+                                quesAnalysis = new Chart(chartConvention, {
+                                    type: 'line',
+                                    data: totalData.quesAnalysis.data,
+                                    options: Options
+                                });
+                            }
+                            var canvasHardestQuestionsChart = document.getElementById("hardest-questions");
+                            if (canvasHardestQuestionsChart) {
+                                var option = {
+                                    tooltips: {
+                                        custom: function (tooltip) {
+                                            if (!tooltip) return;
+                                            // disable displaying the color box;
+                                            tooltip.displayColors = false;
+                                        },
+                                        callbacks: {
+                                            // use label callback to return the desired label
+                                            label: function (tooltipItem, data) {
+                                                return [data.datasets[tooltipItem.datasetIndex].label + " : " + tooltipItem.yLabel, s[7]];
+
+                                            },
+                                            // remove title
+                                            title: function (tooltipItem, data) {
+                                                return;
+                                            }
+                                        }
+                                    },
+                                    scales: { xAxes: [{ scaleLabel: { display: true, labelString: s[1] } }], yAxes: [{ scaleLabel: { display: true, labelString: s[3] }, ticks: { beginAtZero: true, callback: function (value) { if (Number.isInteger(value)) { return value; } } } }] }
+                                };
+                                var Options = $.extend(totalData.hardestQuestions.opt, option);
+                                var chartConvention = canvasHardestQuestionsChart.getContext('2d');
+                                if (hardestQuestions !== undefined) {
+                                    hardestQuestions.destroy();
+                                }
+                                hardestQuestions = new Chart(chartConvention, {
+                                    type: 'bar',
+                                    data: totalData.hardestQuestions.data,
+                                    options: Options
+                                });
+                            }
                         });
                     }
                 })

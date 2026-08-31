@@ -25,6 +25,7 @@
 
 require_once('../../../config.php');
 require_once($CFG->dirroot . '/grade/lib.php');
+require_once(__DIR__ . '/lib.php');
 
 $courseid = required_param('id', PARAM_INT);
 $userid = optional_param('userid', $USER->id, PARAM_INT);
@@ -147,7 +148,7 @@ if (!$quizzes) {
                   WHERE state = 'finished' AND sumgrades IS NOT NULL AND attempt = 1 AND quiz = ?",
                 [$quiz->id]
             );
-            $select = '<select id="userSelect"><option value="-1">'
+            $select = '<select class="userSelect"><option value="-1">'
                 . get_string('user_select', 'gradereport_quizanalytics') . '</option>';
             foreach ($attemptedusers as $attempteduser) {
                 $select .= '<option value="' . $attempteduser->userid . '">'
@@ -175,140 +176,10 @@ if (!empty($table)) {
     echo html_writer::end_tag('div');
 }
 
-$html = '<div class="showanalytics">
-                    <div class="tabbable parentTabs">
-                        <ul class="nav nav-tabs  ">
-                            <li class="tab">
-                                <a class="active" href="#tabs-1"><span class="last-attempt">Last </span>
-                                ' . get_string('attemptsummary', 'gradereport_quizanalytics') . '</a>
-                            </li>
-                            <li class="tab">
-                                <a href="#tabs-2">' . get_string('myprogress', 'gradereport_quizanalytics') . '</a>
-                            </li>
-                            <li class="tab">
-                                <a href="#tabs-3">' . get_string('questioncategory', 'gradereport_quizanalytics') . '</a>
-                            </li>
-                            <li class="tab">
-                                <a href="#tabs-4">' . get_string('questionstats', 'gradereport_quizanalytics') . '</a>
-                            </li>
-                        </ul>
-                        <div class="tab-content">
-                            <div class="tab-pane mobile-overflow active fade in" id="tabs-1">
-                                <div class="canvas-wrap"><label style="width:850px;">
-                                    <canvas id="lastAttempt"></canvas>
-                                </label></div>
-                                <p class="last-attempt-des">'
-                                    . get_string('lastattemptsummarydes', 'gradereport_quizanalytics') . '</p>
-                                <p class="attempt-des">' . get_string('attemptsummarydes', 'gradereport_quizanalytics') . '</p>
-                            </div>
-                            <div class="tab-pane mobile-overflow fade in" id="tabs-2">
-                                <div class="tabbable">
-                                    <ul class="nav nav-tabs  ">
-                                        <li class="tab"><a class="active" href="#subtab21">
-                                            <span class="improvementcurve">'
-                                                . get_string('improvementcurve', 'gradereport_quizanalytics') . '</span>
-                                            <span class="peerperformance">'
-                                                . get_string('peerperformance', 'gradereport_quizanalytics') . '</span>
-                                        </a></li>
-                                        <li class="tab"><a href="#subtab22">'
-                                            . get_string('hardestquestion', 'gradereport_quizanalytics') . '</a></li>
-                                        <li class="tab"><a href="#subtab23">'
-                                            . get_string('attemptsnapshot', 'gradereport_quizanalytics') . '</a></li>
-                                    </ul>
-                                    <div class="tab-content">
-                                        <div id="subtab21" class="tab-pane fade in mobile-overflow active show">
-                                            <div class="subtabmix">
-                                                <div class="canvas-wrap">
-                                                    <label style="width:700px;">
-                                                        <canvas id="mixchart"></canvas>
-                                                    </label>
-                                                </div>
-                                                <p>' . get_string('mixchartdes', 'gradereport_quizanalytics') . '</p>
-                                            </div>
-                                            <div class="subtabtimechart1">
-                                                <div class="canvas-wrap">
-                                                    <label style="width:700px;">
-                                                        <canvas id="timechart"></canvas>
-                                                    </label>
-                                                </div>
-                                                <p>' . get_string('timechartdes', 'gradereport_quizanalytics') . '</p>
-                                            </div>
-                                        </div>
-                                        <div id="subtab22" class="tab-pane fade in mobile-overflow">
-                                            <div class="canvas-wrap"><label style="width:700px;">
-                                                <canvas id="hardest-questions"></canvas>
-                                            </label></div>
-                                            <p>' . get_string('hardestquesdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                        <div id="subtab23" class="tab-pane fade in mobile-overflow">
-                                            <div class=" attemptssnapshot"></div>
-                                            <p>' . get_string('attemptssnapshotdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="tab-pane mobile-overflow fade in" id="tabs-3">
-                                <div class="tabbable">
-                                    <ul class="nav nav-tabs  ">
-                                        <li class="tab">
-                                            <a class="active" href="#subtab31">'
-                                                . get_string('questionpercategory', 'gradereport_quizanalytics') . '</a>
-                                        </li>
-                                        <li class="tab">
-                                            <a href="#subtab32">'
-                                                . get_string('challengingcategoris', 'gradereport_quizanalytics') . '</a>
-                                        </li>
-                                        <li class="tab">
-                                            <a href="#subtab33">'
-                                                . get_string('challengingcategorisforme', 'gradereport_quizanalytics') . '</a>
-                                        </li>
-                                    </ul>
-                                    <div class="tab-content">
-                                        <div id="subtab31" class="tab-pane fade in mobile-overflow active show">
-                                            <label style="width:400px; margin: 0 auto;"><canvas id="questionpercategories"></canvas>
-                                            <div id="js-legendqpc" class="chart-legend"></div></label>
-                                            <p>' . get_string('questionpercatdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                        <div id="subtab32" class="tab-pane fade in mobile-overflow">
-                                           <div class="canvas-wrap"><label style="width:700px;"><canvas id="allusers"></canvas>
-                                            </label></div>
-                                            <p>' . get_string('allusersdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                        <div id="subtab33" class="tab-pane fade in mobile-overflow">
-                                            <div class="canvas-wrap"><label style="width:700px;">
-                                            <canvas id="loggedinuser"></canvas></label></div>
-                                            <p>' . get_string('loggedinuserdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="tab-pane mobile-overflow fade in" id="tabs-4">
-                                <div class="tabbable">
-                                    <ul class="nav nav-tabs  ">
-                                        <li class="tab">
-                                            <a class="active" href="#subtab41">'
-                                                . get_string('scorbrpercent', 'gradereport_quizanalytics') . '</a>
-                                        </li>
-                                        <li class="tab">
-                                            <a href="#subtab42">' . get_string('quesanalysis', 'gradereport_quizanalytics') . '</a>
-                                        </li>
-                                    </ul>
-                                    <div class="tab-content">
-                                        <div id="subtab41" class="tab-pane fade in mobile-overflow active show">
-                                            <label style="width:400px; margin: 0 auto;"><canvas id="gradeanalysis"></canvas>
-                                            <div id="js-legendgrade" class="chart-legend"></div></label>
-                                            <p>' . get_string('gradeanalysisdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                        <div id="subtab42" class="tab-pane fade in mobile-overflow">
-                                            <div class="canvas-wrap"><label style="width:700px;">
-                                            <canvas id="questionanalysis"></canvas></label></div>
-                                            <p>' . get_string('quesananalysisdes', 'gradereport_quizanalytics') . '</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>';
-echo $html;
+echo gradereport_quizanalytics_render_analytics_html();
+
+if (!empty($CFG->gradereport_quizanalytics_customcss)) {
+    echo html_writer::tag('style', $CFG->gradereport_quizanalytics_customcss);
+}
+
 echo $OUTPUT->footer();

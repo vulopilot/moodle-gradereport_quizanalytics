@@ -98,31 +98,58 @@ class get_analytics extends external_api {
         $sql = "SELECT * FROM {quiz_attempts} WHERE state = 'finished' AND sumgrades IS NOT NULL AND quiz = ?";
         $totalquizattempted = $DB->get_records_sql($sql, [$quizid]);
         $usersgradedattempts = $DB->get_records_sql($sql . " AND userid = ?", [$quizid, $userid]);
-        $totalnoofquestion = $DB->get_record_sql(
-            "SELECT COUNT(q.id) as qnum
-               FROM {quiz_slots} qs, {question} q, {question_references} qr,
-                    {question_bank_entries} qbe, {question_versions} qv
-              WHERE qr.component = 'mod_quiz' AND qr.questionarea = 'slot' AND qr.itemid = qs.id
-                AND qbe.id = qr.questionbankentryid AND qv.questionbankentryid = qbe.id
-                AND q.id = qv.questionid AND qs.quizid = ? AND q.qtype != ?",
-            [$quizid, 'description']
-        );
-        $sql = "SELECT qc.id, COUNT(q.id) as qnum, qc.name
-                  FROM {quiz_slots} qs, {question} q, {question_categories} qc, {question_references} qr,
-                       {question_bank_entries} qbe, {question_versions} qv
-                 WHERE qr.component = 'mod_quiz' AND qr.questionarea = 'slot' AND qr.itemid = qs.id
-                   AND qbe.id = qr.questionbankentryid AND qv.questionbankentryid = qbe.id
-                   AND q.id = qv.questionid AND qbe.questioncategoryid = qc.id
-                   AND qs.quizid = ? AND q.qtype != ?
-              GROUP BY qc.id";
-        $categorys = $DB->get_records_sql($sql, [$quizid, 'description']);
+
+        // Hand-rolled joins through {question_references} only resolve *fixed* slots - a "random
+        // question from category" slot has no row there at all (it lives in
+        // {question_set_references} instead, with its category buried in a JSON filtercondition),
+        // so it would silently vanish from every count below. qbank_helper::get_question_structure()
+        // is the core API mod_quiz itself uses to resolve both kinds of slot correctly, including
+        // versioning, so we build the question/category totals from that instead of raw SQL.
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, $quiz->course, false, MUST_EXIST);
+        $quizcontext = \context_module::instance($cm->id);
+        $slots = \mod_quiz\question\bank\qbank_helper::get_question_structure($quiz->id, $quizcontext);
+        // Random slots (qtype 'random') draw a different concrete question per attempt, so unlike
+        // fixed slots they can't be broken down individually later on - but they still count as
+        // real questions here for the totals and the per-category breakdown.
+        $realslots = array_filter($slots, function ($slot) {
+            return $slot->qtype !== 'description';
+        });
+
+        $totalnoofquestion = (object) ['qnum' => count($realslots)];
+
+        $categorycounts = [];
+        foreach ($realslots as $slot) {
+            $categorycounts[$slot->category] = ($categorycounts[$slot->category] ?? 0) + 1;
+        }
+        $categorynames = [];
+        if ($categorycounts) {
+            [$insql, $inparams] = $DB->get_in_or_equal(array_keys($categorycounts));
+            $categoryrecords = $DB->get_records_select('question_categories', "id $insql", $inparams, '', 'id, name');
+            foreach ($categoryrecords as $categoryrecord) {
+                $categorynames[$categoryrecord->id] = $categoryrecord->name;
+            }
+        }
+        $categorys = [];
+        foreach ($categorycounts as $categoryid => $qnum) {
+            $categorys[] = (object) [
+                'id' => $categoryid,
+                'qnum' => $qnum,
+                'name' => $categorynames[$categoryid] ?? '',
+            ];
+        }
+        // Qatt.questionid is the actual question a user was given (even for a random slot, this is
+        // already resolved to one concrete question), and each question row belongs to exactly one
+        // question_versions row, so its category can be looked up directly - no slot/version
+        // resolution needed here, unlike $slots above.
         $sql = "SELECT qattstep.id as qattstepid, quizatt.id as quizattid, qatt.questionid,
                        qattstep.state, qattstep.sequencenumber
                   FROM {quiz_attempts} quizatt, {question_attempts} qatt, {question_attempt_steps} qattstep,
-                       {question} q, {question_categories} qc, {question_bank_entries} qbe
+                       {question} q, {question_categories} qc, {question_bank_entries} qbe,
+                       {question_versions} qv
                  WHERE qatt.questionusageid = quizatt.uniqueid AND qattstep.questionattemptid = qatt.id
-                   AND q.id = qatt.questionid AND qbe.questioncategoryid = qc.id AND qbe.id = q.id
-                   AND quizatt.quiz = ? AND qattstep.questionattemptid = ? AND q.qtype != ?
+                   AND q.id = qatt.questionid AND qv.questionid = q.id AND qv.questionbankentryid = qbe.id
+                   AND qbe.questioncategoryid = qc.id
+                   AND quizatt.quiz = ? AND qc.id = ? AND q.qtype != ?
                    AND qattstep.sequencenumber >= 2
                    AND (qattstep.state = 'gradedright' OR qattstep.state = 'mangrright')";
         $categoryname = $chartdata = $randomcolor = [];
@@ -269,18 +296,20 @@ class get_analytics extends external_api {
             $accuracyrate = 0;
         }
         if (count($totalattempted) != 0) {
+            $noofwronganswers = count($totalattempted) - count($rightattempt) - count($partialcorrectattempt);
             if (count($partialcorrectattempt) != 0) {
                 $lastattemptsummarydata = [
                     'labels' => [
                         get_string('noofquestionattempt', 'gradereport_quizanalytics'),
                         get_string('noofrightans', 'gradereport_quizanalytics'),
                         get_string('noofpartialcorrect', 'gradereport_quizanalytics'),
+                        get_string('noofwronganswers', 'gradereport_quizanalytics'),
                     ],
                     'datasets' => [[
-                        'backgroundColor' => ["#2EA0EF", "#79D527", "#FF9827"],
+                        'backgroundColor' => ["#2EA0EF", "#79D527", "#FF9827", "#EB2838"],
                         'data' => [
                             count($totalattempted), count($rightattempt),
-                            count($partialcorrectattempt),
+                            count($partialcorrectattempt), $noofwronganswers,
                         ],
                     ]],
                 ];
@@ -289,10 +318,11 @@ class get_analytics extends external_api {
                     'labels' => [
                         get_string('noofquestionattempt', 'gradereport_quizanalytics'),
                         get_string('noofrightans', 'gradereport_quizanalytics'),
+                        get_string('noofwronganswers', 'gradereport_quizanalytics'),
                     ],
                     'datasets' => [[
-                        'backgroundColor' => ["#2EA0EF", "#79D527"],
-                        'data' => [count($totalattempted), count($rightattempt)],
+                        'backgroundColor' => ["#2EA0EF", "#79D527", "#EB2838"],
+                        'data' => [count($totalattempted), count($rightattempt), $noofwronganswers],
                     ]],
                 ];
             }
@@ -352,7 +382,7 @@ class get_analytics extends external_api {
                     ],
                     'datasets' => [[
                         'label' => 'Attempt' . $count,
-                        'backgroundColor' => ['#3e95cd', '#8e5ea2', '#3cba9f', '#e8c3b9'],
+                        'backgroundColor' => ['#3e95cd', '#3cba9f', '#8e5ea2', '#e8c3b9'],
                         'data' => $snapdata[$count],
                     ]],
                 ];
@@ -381,7 +411,7 @@ class get_analytics extends external_api {
                 ],
                 'datasets' => [[
                     'label' => 'Attempt1',
-                    'backgroundColor' => ['#3e95cd', '#8e5ea2', '#3cba9f', '#e8c3b9'],
+                    'backgroundColor' => ['#3e95cd', '#3cba9f', '#8e5ea2', '#e8c3b9'],
                     'data' => [0, 0, 0, 0],
                 ]],
             ];
@@ -422,7 +452,8 @@ class get_analytics extends external_api {
         }
         /* mixchart */
         $attemptcutoff = $DB->get_records_sql(
-            "SELECT * FROM {quiz_attempts}
+            "SELECT userid, MIN(attempt) as attempt
+               FROM {quiz_attempts}
               WHERE state = 'finished' AND sumgrades IS NOT NULL AND quiz = ? AND sumgrades >= ?
            GROUP BY userid",
             [$quizid, (($quiz->sumgrades * $CFG->gradereport_quizanalytics_cutoff) / 100)]
@@ -526,20 +557,17 @@ class get_analytics extends external_api {
             'legend' => ['display' => false, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
         ];
         /* quesanalysis */
-        $totalquestions = $DB->get_records_sql(
-            "SELECT qs.id, q.qtype
-               FROM {quiz_slots} qs, {question} q, {question_references} qr,
-                    {question_bank_entries} qbe, {question_versions} qv
-              WHERE qr.component = 'mod_quiz' AND qr.questionarea = 'slot' AND qr.itemid = qs.id
-                AND qbe.id = qr.questionbankentryid AND qv.questionbankentryid = qbe.id
-                AND q.id = qv.questionid AND qs.quizid= ? AND q.qtype != ?",
-            [$quizid, 'description']
-        );
+        // Random slots are deliberately excluded here (unlike $realslots above): each attempt
+        // draws a different concrete question for them, so there is no single "the question in
+        // this slot" to break out individually the way this section does for fixed slots.
+        $totalquestions = array_values(array_filter($slots, function ($slot) {
+            return $slot->qtype !== 'description' && $slot->qtype !== 'random' && $slot->qtype !== 'missingtype';
+        }));
         $count = 1;
         $sql = "SELECT COUNT(qatt.id) as qnum
                   FROM {question_attempts} qatt, {quiz_attempts} quizatt, {question_attempt_steps} qas
                  WHERE qas.questionattemptid = qatt.id AND quizatt.uniqueid = qatt.questionusageid
-                   AND qas.sequencenumber = ? AND quizatt.sumgrades <> 'NULL' AND quizatt.quiz= ?
+                   AND qas.sequencenumber = ? AND quizatt.sumgrades IS NOT NULL AND quizatt.quiz= ?
                    AND qatt.questionid = ? AND";
         $userunattempted = $correctresponse = $incorrectresponse = $partialresponse = [];
         $questionlabels = $negativeattemptd = $queshardness = $selectedquestionid = [];
@@ -551,26 +579,26 @@ class get_analytics extends external_api {
             }
             $usercorrectresponse = $DB->get_record_sql(
                 $sql . " (qas.state = 'gradedright' OR qas.state = 'mangrright')",
-                [$sequencenumber, $quizid, $totalquestion->id, $userid]
+                [$sequencenumber, $quizid, $totalquestion->questionid]
             );
             $userincorrectresponse = $DB->get_record_sql(
                 $sql . " (qas.state = 'gradedwrong' OR qas.state = 'mangrwrong')",
-                [$sequencenumber, $quizid, $totalquestion->id, $userid]
+                [$sequencenumber, $quizid, $totalquestion->questionid]
             );
             $userpartialresponse = $DB->get_record_sql(
                 $sql . " (qas.state = 'gradedpartial' OR qas.state = 'mangrpartial')",
-                [$sequencenumber, $quizid, $totalquestion->id, $userid]
+                [$sequencenumber, $quizid, $totalquestion->questionid]
             );
             $respondedcount = $usercorrectresponse->qnum + $userincorrectresponse->qnum + $userpartialresponse->qnum;
-            $userunattempted[] = count($usersgradedattempts) - $respondedcount;
             $unattempted = count($totalquizattempted) - $respondedcount;
+            $userunattempted[] = $unattempted;
             $correctresponse[] = $usercorrectresponse->qnum;
             $incorrectresponse[] = $userincorrectresponse->qnum;
             $partialresponse[] = $userpartialresponse->qnum;
             $questionlabels[] = "Q" . $count;
             $negativeattemptd[] = $unattempted + $userincorrectresponse->qnum;
             $queshardness[] = round((($unattempted + $userincorrectresponse->qnum) / count($totalquizattempted)) * 100, 2);
-            $selectedquestionid[] = "Q" . $count . "," . $totalquestion->id;
+            $selectedquestionid[] = "Q" . $count . "," . $totalquestion->questionid;
             $count++;
         }
         arsort($queshardness);

@@ -253,3 +253,11 @@
       margin: auto !important;
     }
   }
+  #gradereport-quizanalytics-review {
+    margin-top: 30px;
+    padding-top: 15px;
+    border-top: 1px solid #dadada;
+  }
+  #gradereport-quizanalytics-review h4 {
+    margin-bottom: 10px;
+  }

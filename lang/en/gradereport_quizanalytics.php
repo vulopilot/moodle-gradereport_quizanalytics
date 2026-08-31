@@ -66,11 +66,29 @@ $string['setglobal'] = 'Set Globally';
 $string['setglobaldes'] = 'Set Grade Boundary For All Quiz. This when checked rewrites the individual grade boundary settings for each quiz.';
 $string['setcutoff'] = 'Set Cut Off';
 $string['cutoffdes'] = 'Set Cut Off percentage (%) for all the quiz. This will be used for predictive analysis graph.';
+$string['visibleanalytics'] = 'Visible analytics';
+$string['showattemptsummarytab'] = 'Show Attempt Summary tab';
+$string['showattemptsummarytabdes'] = 'Show the Attempt Summary / Last Attempt Summary tab.';
+$string['showmyprogresstab'] = 'Show My Progress and Predictions tab';
+$string['showmyprogresstabdes'] = 'Show the My Progress and Predictions tab '
+    . '(Improvement Curve, Hardest Question, Attempt Snapshot).';
+$string['showquestioncategorytab'] = 'Show Question Categories&#39; Analysis tab';
+$string['showquestioncategorytabdes'] = 'Show the Question Categories&#39; Analysis tab.';
+$string['showquestionstatstab'] = 'Show Scores&#39; & Questions&#39; Stats tab';
+$string['showquestionstatstabdes'] = 'Show the Scores&#39; & Questions&#39; Stats tab.';
+$string['customcss'] = 'Custom CSS';
+$string['customcssdes'] = 'CSS rules added here are injected on every Quiz Analytics page, after the plugin&#39;s '
+    . 'own stylesheet, so they can be used to restyle the report without editing the plugin files - changes made '
+    . 'here survive future plugin updates.';
+$string['showonreviewpage'] = 'Show on the quiz attempt review page';
+$string['showonreviewpagedes'] = 'When enabled, a compact version of the analytics for the reviewed attempt is '
+    . 'also shown on the quiz&#39;s own attempt review page, for users who have permission to view it.';
 // Externallib.
 $string['noofquestionattempt'] = 'Number of Questions Attempted';
 $string['noofquestionunattempt'] = 'Number of Questions Unattempted';
 $string['noofrightans'] = 'Number of Right Answers';
 $string['noofpartialcorrect'] = 'Number of Partial Correct Answers';
+$string['noofwronganswers'] = 'Number of Wrong Answers';
 $string['accuaracyrate'] = 'Accuracy Rate : ';
 $string['impandpredicanalysis'] = 'Improvement Curve & Predictive Analysis';
 $string['peerscores'] = 'Peer Scores';

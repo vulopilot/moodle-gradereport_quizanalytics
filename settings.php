@@ -51,4 +51,62 @@ if (is_siteadmin()) {
             '0-60, 61-70, 71-80, 81-90, 91-100'
         )
     );
+
+    $settings->add(
+        new admin_setting_heading(
+            'gradereport_quizanalytics_visibleheading',
+            get_string('visibleanalytics', 'gradereport_quizanalytics'),
+            ''
+        )
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'gradereport_quizanalytics_showattemptsummarytab',
+            get_string('showattemptsummarytab', 'gradereport_quizanalytics'),
+            get_string('showattemptsummarytabdes', 'gradereport_quizanalytics'),
+            1
+        )
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'gradereport_quizanalytics_showmyprogresstab',
+            get_string('showmyprogresstab', 'gradereport_quizanalytics'),
+            get_string('showmyprogresstabdes', 'gradereport_quizanalytics'),
+            1
+        )
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'gradereport_quizanalytics_showquestioncategorytab',
+            get_string('showquestioncategorytab', 'gradereport_quizanalytics'),
+            get_string('showquestioncategorytabdes', 'gradereport_quizanalytics'),
+            1
+        )
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'gradereport_quizanalytics_showquestionstatstab',
+            get_string('showquestionstatstab', 'gradereport_quizanalytics'),
+            get_string('showquestionstatstabdes', 'gradereport_quizanalytics'),
+            1
+        )
+    );
+
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'gradereport_quizanalytics_showonreviewpage',
+            get_string('showonreviewpage', 'gradereport_quizanalytics'),
+            get_string('showonreviewpagedes', 'gradereport_quizanalytics'),
+            0
+        )
+    );
+
+    $settings->add(
+        new admin_setting_configtextarea(
+            'gradereport_quizanalytics_customcss',
+            get_string('customcss', 'gradereport_quizanalytics'),
+            get_string('customcssdes', 'gradereport_quizanalytics'),
+            ''
+        )
+    );
 }

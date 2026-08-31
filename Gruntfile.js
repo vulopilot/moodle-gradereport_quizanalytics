@@ -1,12 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { rollup } = require('rollup');
-const { nodeResolve } = require('@rollup/plugin-node-resolve');
-const commonjs = require('@rollup/plugin-commonjs');
-const { terser } = require('rollup-plugin-terser');
+const { minify } = require('terser');
 
 module.exports = function (grunt) {
-    grunt.registerTask('amd', 'Build AMD modules', async function () {
+    grunt.registerTask('amd', 'Minify AMD modules', async function () {
         const done = this.async();
         const srcDir = 'amd/src';
         const destDir = 'amd/build';
@@ -22,20 +19,18 @@ module.exports = function (grunt) {
                 const inputPath = path.join(srcDir, file);
                 const outputPath = path.join(destDir, file.replace('.js', '.min.js'));
 
-                const bundle = await rollup({
-                    input: inputPath,
-                    plugins: [
-                        nodeResolve(),
-                        commonjs(),
-                        terser()
-                    ]
+                // These are already hand-written AMD/UMD modules (define(deps, factory), no
+                // import/export), so they only need minifying - not bundling or re-wrapping.
+                const source = fs.readFileSync(inputPath, 'utf8');
+                const result = await minify(source, {
+                    sourceMap: false,
                 });
 
-                await bundle.write({
-                    file: outputPath,
-                    format: 'amd'
-                });
+                if (result.error) {
+                    throw result.error;
+                }
 
+                fs.writeFileSync(outputPath, result.code);
                 grunt.log.writeln(`✔ Built ${file} → ${outputPath}`);
             }
             done();
