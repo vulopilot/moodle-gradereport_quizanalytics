@@ -18,6 +18,15 @@
     position: relative;
     text-align: center;
   }
+  /* Bootstrap 5 dropped its jQuery tab plugin, so analytic.js toggles panes itself instead of
+     relying on $(...).tab('show') - this pane visibility is likewise handled by us directly
+     rather than assumed from the theme's own (Bootstrap-version-dependent) tab CSS. */
+  .showanalytics .tab-pane {
+    display: none;
+  }
+  .showanalytics .tab-pane.active {
+    display: block;
+  }
   .showanalytics ul.nav-tabs li a {
     border: 1px solid #CCCCCC !important;
     padding: .5em 1em;

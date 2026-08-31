@@ -203,7 +203,18 @@ define(
                         }
                         setTimeout(function () {
                             $(".showanalytics").find("ul.nav-tabs a").click(function () {
-                                $(this).tab('show');
+                                // $(this).tab('show') relied on Bootstrap's jQuery tab plugin,
+                                // which was removed in Bootstrap 5 - toggle the active tab and
+                                // its pane by hand instead so this doesn't depend on which
+                                // Bootstrap version the current theme happens to ship. No
+                                // preventDefault here: the href="#subtabXX" anchor jump is left
+                                // to run natively so the URL hash still updates for deep-linking.
+                                var tabgroup = $(this).closest("ul.nav-tabs");
+                                var panegroup = tabgroup.siblings(".tab-content").first();
+                                tabgroup.find("a").removeClass("active");
+                                $(this).addClass("active");
+                                panegroup.children(".tab-pane").removeClass("active show");
+                                $($(this).attr("href")).addClass("active show");
                                 // Center scroll on mobile.
                                 if ($(window).width() < 480) {
                                     var outerContent = $('.mobile-overflow');
@@ -230,6 +241,7 @@ define(
                             $.each(attemptsSnapshotArray, function (i, v) {
                                 v.destroy();
                             });
+                            attemptsSnapshotArray = [];
                         }
                         str.get_strings(stringFetch).done(function(s){
                             // Every canvas below belongs to a tab that can be turned off via the plugin's

@@ -93,6 +93,7 @@ print_grade_page_head(
 $quizzes = $DB->get_records('quiz', ['course' => $courseid]);
 
 $table = new html_table();
+$table->attributes['class'] = 'generaltable';
 if (!$quizzes) {
     echo $OUTPUT->heading(get_string('noquizfound', 'gradereport_quizanalytics'));
     $table = null;
