@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the quizanalytics gradebook report.
+ * Hook callback registrations for the quizanalytics gradebook report.
  *
  * @package   gradereport_quizanalytics
  * @author    DualCube <admin@dualcube.com>
@@ -25,8 +25,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026083111; // The current plugin version (Date: YYYYMMDDXX).
-$plugin->requires = 2024042210; // Requires this Moodle version.
-$plugin->component = 'gradereport_quizanalytics'; // Full name of the plugin (used for diagnostics).
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = '2.4.10 (Build: 2026083111)';
+$callbacks = [
+    [
+        'hook' => \core\hook\output\before_footer_html_generation::class,
+        'callback' => [\gradereport_quizanalytics\local\hook_callbacks::class, 'before_footer_html_generation'],
+    ],
+];
