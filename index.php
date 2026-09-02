@@ -25,7 +25,6 @@
 
 require_once('../../../config.php');
 require_once($CFG->dirroot . '/grade/lib.php');
-require_once(__DIR__ . '/lib.php');
 
 $courseid = required_param('id', PARAM_INT);
 $userid = optional_param('userid', $USER->id, PARAM_INT);
@@ -176,7 +175,8 @@ if (!empty($table)) {
     echo html_writer::end_tag('div');
 }
 
-echo gradereport_quizanalytics_render_analytics_html();
+$renderer = $PAGE->get_renderer('gradereport_quizanalytics');
+echo $renderer->render_analytics_html();
 
 if (!empty($CFG->gradereport_quizanalytics_customcss)) {
     echo html_writer::tag('style', $CFG->gradereport_quizanalytics_customcss);
