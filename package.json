@@ -1,14 +1,17 @@
 {
   "name": "moodle-gradereport-quizanalytics",
-  "version": "2.4.7",
+  "version": "2.4.8",
   "devDependencies": {
     "chart.js": "4.5.1",
     "datatables.net": "3.0.2",
     "grunt": "^1.6.1",
+    "grunt-stylelint": "0.19.0",
+    "stylelint": "15.11.0",
     "terser": "^5.31.0"
   },
   "scripts": {
     "build": "npx grunt amd",
+    "stylelint": "npx grunt stylelint",
     "release": "git tag -a v${npm_package_version} -m \"Release v${npm_package_version}\" && git push origin v${npm_package_version}",
     "phpcs": "composer run-script phpcs",
     "phpcf": "composer run-script phpcf"
