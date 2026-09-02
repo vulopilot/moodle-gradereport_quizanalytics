@@ -240,8 +240,14 @@ class get_analytics extends external_api {
         // already resolved to one concrete question), and each question row belongs to exactly one
         // question_versions row, so its category can be looked up directly - no slot/version
         // resolution needed here, unlike qbank_helper::get_question_structure() in execute().
-        $sql = "SELECT qattstep.id as qattstepid, quizatt.id as quizattid, qatt.questionid,
-                       qattstep.state, qattstep.sequencenumber
+        //
+        // COUNT(DISTINCT qatt.id), not a plain row count: sequencenumber >= 2 is a range, and a
+        // single question attempt can pass through 'gradedright'/'mangrright' at more than one
+        // step (e.g. an initial auto-grade step, then a later finish/regrade step landing on the
+        // same state) - counting rows instead of distinct attempts double-counts those, which can
+        // push the computed "wrong" count to zero or below and hide categories that really do have
+        // wrong answers.
+        $sql = "SELECT COUNT(DISTINCT qatt.id) as cnt
                   FROM {quiz_attempts} quizatt, {question_attempts} qatt, {question_attempt_steps} qattstep,
                        {question} q, {question_categories} qc, {question_bank_entries} qbe,
                        {question_versions} qv
@@ -257,17 +263,17 @@ class get_analytics extends external_api {
             $categoryname[] = empty($category->name) ? 'category' : $category->name;
             $chartdata[] = empty($category->qnum) ? 1 : ($category->qnum);
             $randomcolor[] = "#" . self::random_color();
-            $correctattempts = $db->get_records_sql($sql, [$quizid, $category->id, 'description']);
-            $userscorrectattempts = $db->get_records_sql(
+            $correctattempts = $db->get_record_sql($sql, [$quizid, $category->id, 'description'])->cnt;
+            $userscorrectattempts = $db->get_record_sql(
                 $sql . " AND quizatt.userid = ?",
                 [$quizid, $category->id, 'description', $userid]
-            );
+            )->cnt;
             $categoryattempts = $category->qnum * $totalattempts;
             $categoryuserattempts = $category->qnum * $userattempts;
-            $wrongattemts[] = ($categoryattempts - count($correctattempts));
-            $userswrongattemts[] = ($categoryuserattempts - count($userscorrectattempts));
-            $overallhardness[] = round(((($categoryattempts - count($correctattempts)) / $categoryattempts) * 100), 2);
-            $userhardness[] = round(((($categoryuserattempts - count($userscorrectattempts)) / $categoryuserattempts) * 100), 2);
+            $wrongattemts[] = ($categoryattempts - $correctattempts);
+            $userswrongattemts[] = ($categoryuserattempts - $userscorrectattempts);
+            $overallhardness[] = round(((($categoryattempts - $correctattempts) / $categoryattempts) * 100), 2);
+            $userhardness[] = round(((($categoryuserattempts - $userscorrectattempts) / $categoryuserattempts) * 100), 2);
         }
         return [
             'categoryname' => $categoryname,
