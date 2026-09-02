@@ -25,17 +25,16 @@ namespace gradereport_quizanalytics\output;
  */
 class renderer extends \plugin_renderer_base {
     /**
-     * Builds the tabbed analytics markup shared by the report page and the quiz review page embed.
+     * Returns which top-level tabs are enabled, keyed by tab id.
      *
-     * Each top-level tab can be turned off via the "Visible analytics" admin settings, so the tabs
-     * actually present - and therefore which one ends up marked active - vary per site.
+     * Each one can be turned off via the "Visible analytics" admin settings.
      *
-     * @return string HTML, or an empty string if every tab has been turned off.
+     * @return bool[]
      */
-    public function render_analytics_html(): string {
+    private function get_tab_visibility(): array {
         global $CFG;
 
-        $showtabs = [
+        return [
             'tabs-1' => !isset($CFG->gradereport_quizanalytics_showattemptsummarytab)
                 || $CFG->gradereport_quizanalytics_showattemptsummarytab,
             'tabs-2' => !isset($CFG->gradereport_quizanalytics_showmyprogresstab)
@@ -45,21 +44,44 @@ class renderer extends \plugin_renderer_base {
             'tabs-4' => !isset($CFG->gradereport_quizanalytics_showquestionstatstab)
                 || $CFG->gradereport_quizanalytics_showquestionstatstab,
         ];
+    }
 
-        if (!array_filter($showtabs)) {
-            return '';
-        }
-
-        $navlabels = [
+    /**
+     * Returns the nav-link label for each top-level tab, keyed by tab id.
+     *
+     * @return string[]
+     */
+    private function get_tab_nav_labels(): array {
+        return [
             'tabs-1' => '<span class="last-attempt">Last </span>'
                 . get_string('attemptsummary', 'gradereport_quizanalytics'),
             'tabs-2' => get_string('myprogress', 'gradereport_quizanalytics'),
             'tabs-3' => get_string('questioncategory', 'gradereport_quizanalytics'),
             'tabs-4' => get_string('questionstats', 'gradereport_quizanalytics'),
         ];
+    }
 
-        $panes = [
-            'tabs-1' => '
+    /**
+     * Returns the pane markup for each top-level tab, keyed by tab id.
+     *
+     * @return string[]
+     */
+    private function get_tab_panes(): array {
+        return [
+            'tabs-1' => $this->get_attempt_summary_pane(),
+            'tabs-2' => $this->get_my_progress_pane(),
+            'tabs-3' => $this->get_question_category_pane(),
+            'tabs-4' => $this->get_question_stats_pane(),
+        ];
+    }
+
+    /**
+     * Returns the "Attempt Summary" pane markup (tabs-1).
+     *
+     * @return string
+     */
+    private function get_attempt_summary_pane(): string {
+        return '
                                 <div class="tab-pane mobile-overflow fade in" id="tabs-1">
                                     <div class="canvas-wrap"><label style="width:850px;">
                                         <canvas id="lastAttempt"></canvas>
@@ -68,8 +90,16 @@ class renderer extends \plugin_renderer_base {
                                         . get_string('lastattemptsummarydes', 'gradereport_quizanalytics') . '</p>
                                     <p class="attempt-des">'
                                         . get_string('attemptsummarydes', 'gradereport_quizanalytics') . '</p>
-                                </div>',
-            'tabs-2' => '
+                                </div>';
+    }
+
+    /**
+     * Returns the "My Progress and Predictions" pane markup (tabs-2).
+     *
+     * @return string
+     */
+    private function get_my_progress_pane(): string {
+        return '
                                 <div class="tab-pane mobile-overflow fade in" id="tabs-2">
                                     <div class="tabbable">
                                         <ul class="nav nav-tabs  ">
@@ -115,8 +145,16 @@ class renderer extends \plugin_renderer_base {
                                             </div>
                                         </div>
                                     </div>
-                                </div>',
-            'tabs-3' => '
+                                </div>';
+    }
+
+    /**
+     * Returns the "Question Categories' Analysis" pane markup (tabs-3).
+     *
+     * @return string
+     */
+    private function get_question_category_pane(): string {
+        return '
                                 <div class="tab-pane mobile-overflow fade in" id="tabs-3">
                                     <div class="tabbable">
                                         <ul class="nav nav-tabs  ">
@@ -152,8 +190,16 @@ class renderer extends \plugin_renderer_base {
                                             </div>
                                         </div>
                                     </div>
-                                </div>',
-            'tabs-4' => '
+                                </div>';
+    }
+
+    /**
+     * Returns the "Scores' & Questions' Stats" pane markup (tabs-4).
+     *
+     * @return string
+     */
+    private function get_question_stats_pane(): string {
+        return '
                                 <div class="tab-pane mobile-overflow fade in" id="tabs-4">
                                     <div class="tabbable">
                                         <ul class="nav nav-tabs  ">
@@ -179,8 +225,24 @@ class renderer extends \plugin_renderer_base {
                                             </div>
                                         </div>
                                     </div>
-                                </div>',
-        ];
+                                </div>';
+    }
+
+    /**
+     * Builds the tabbed analytics markup shared by the report page and the quiz review page embed.
+     *
+     * Each top-level tab can be turned off via the "Visible analytics" admin settings, so the tabs
+     * actually present - and therefore which one ends up marked active - vary per site.
+     *
+     * @return string HTML, or an empty string if every tab has been turned off.
+     */
+    public function render_analytics_html(): string {
+        $showtabs = $this->get_tab_visibility();
+        if (!array_filter($showtabs)) {
+            return '';
+        }
+        $navlabels = $this->get_tab_nav_labels();
+        $panes = $this->get_tab_panes();
 
         $navhtml = '';
         $paneshtml = '';

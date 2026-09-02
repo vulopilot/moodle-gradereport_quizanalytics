@@ -24,6 +24,42 @@
  */
 
 /**
+ * Returns the finished, graded quiz attempt referenced by the current request's "attempt" param.
+ *
+ * @param moodle_database $db
+ * @return stdClass|null The attempt record, or null if there isn't one worth showing analytics for.
+ */
+function gradereport_quizanalytics_get_review_attempt($db) {
+    $attemptid = optional_param('attempt', 0, PARAM_INT);
+    if (!$attemptid) {
+        return null;
+    }
+    $attempt = $db->get_record('quiz_attempts', ['id' => $attemptid]);
+    if (!$attempt || $attempt->state !== 'finished' || $attempt->sumgrades === null) {
+        return null;
+    }
+    return $attempt;
+}
+
+/**
+ * Checks whether the current user is allowed to see the analytics embed for this attempt.
+ *
+ * @param context_course $coursecontext
+ * @param stdClass $attempt
+ * @param int $userid The current user's id.
+ * @return bool
+ */
+function gradereport_quizanalytics_can_view_review_embed($coursecontext, $attempt, $userid) {
+    if (!has_capability('gradereport/quizanalytics:view', $coursecontext)) {
+        return false;
+    }
+    if ($attempt->userid == $userid) {
+        return has_capability('moodle/grade:view', $coursecontext);
+    }
+    return has_capability('moodle/grade:viewall', $coursecontext);
+}
+
+/**
  * Embeds a compact "Quiz Analytics" panel on the quiz attempt review page, if the site admin has
  * enabled the "Show on the quiz attempt review page" setting and the viewer is allowed to see it.
  *
@@ -32,19 +68,12 @@
 function gradereport_quizanalytics_before_footer() {
     global $CFG, $PAGE, $DB, $USER;
 
-    if (empty($CFG->gradereport_quizanalytics_showonreviewpage)) {
-        return '';
-    }
-    if ($PAGE->pagetype !== 'mod-quiz-review') {
+    if (empty($CFG->gradereport_quizanalytics_showonreviewpage) || $PAGE->pagetype !== 'mod-quiz-review') {
         return '';
     }
 
-    $attemptid = optional_param('attempt', 0, PARAM_INT);
-    if (!$attemptid) {
-        return '';
-    }
-    $attempt = $DB->get_record('quiz_attempts', ['id' => $attemptid]);
-    if (!$attempt || $attempt->state !== 'finished' || $attempt->sumgrades === null) {
+    $attempt = gradereport_quizanalytics_get_review_attempt($DB);
+    if (!$attempt) {
         return '';
     }
     $quiz = $DB->get_record('quiz', ['id' => $attempt->quiz]);
@@ -53,15 +82,7 @@ function gradereport_quizanalytics_before_footer() {
     }
 
     $coursecontext = context_course::instance($quiz->course);
-    if (!has_capability('gradereport/quizanalytics:view', $coursecontext)) {
-        return '';
-    }
-    $isownattempt = $attempt->userid == $USER->id;
-    if ($isownattempt) {
-        if (!has_capability('moodle/grade:view', $coursecontext)) {
-            return '';
-        }
-    } else if (!has_capability('moodle/grade:viewall', $coursecontext)) {
+    if (!gradereport_quizanalytics_can_view_review_embed($coursecontext, $attempt, $USER->id)) {
         return '';
     }
 

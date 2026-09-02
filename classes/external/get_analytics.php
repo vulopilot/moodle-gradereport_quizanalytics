@@ -29,6 +29,7 @@ use context_course;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_value;
+use gradereport_quizanalytics\local\chart_builder;
 
 /**
  * Builds the chart data consumed by the quiz analytics report.
@@ -99,12 +100,85 @@ class get_analytics extends external_api {
         $totalquizattempted = $DB->get_records_sql($sql, [$quizid]);
         $usersgradedattempts = $DB->get_records_sql($sql . " AND userid = ?", [$quizid, $userid]);
 
-        // Hand-rolled joins through {question_references} only resolve *fixed* slots - a "random
-        // question from category" slot has no row there at all (it lives in
-        // {question_set_references} instead, with its category buried in a JSON filtercondition),
-        // so it would silently vanish from every count below. qbank_helper::get_question_structure()
-        // is the core API mod_quiz itself uses to resolve both kinds of slot correctly, including
-        // versioning, so we build the question/category totals from that instead of raw SQL.
+        [$slots, $totalnoofquestion, $realslots] = self::resolve_slots($quiz);
+        $categorys = self::get_question_categories($DB, $realslots);
+        $hardness = self::compute_category_hardness(
+            $DB,
+            $quizid,
+            $userid,
+            $categorys,
+            count($totalquizattempted),
+            count($usersgradedattempts)
+        );
+
+        $lastattemptid = $DB->get_record_sql(
+            "SELECT quizatt.id
+               FROM {quiz_attempts} quizatt
+              WHERE quizatt.state = 'finished' AND quizatt.sumgrades IS NOT NULL
+                AND quizatt.quiz = ? AND quizatt.userid= ?
+           ORDER BY quizatt.id DESC LIMIT 1",
+            [$quizid, $userid]
+        );
+
+        // Random slots are deliberately excluded here (unlike $realslots above): each attempt
+        // draws a different concrete question for them, so there is no single "the question in
+        // this slot" to break out individually the way this section does for fixed slots.
+        $totalquestions = array_values(array_filter($slots, function ($slot) {
+            return $slot->qtype !== 'description' && $slot->qtype !== 'random' && $slot->qtype !== 'missingtype';
+        }));
+        $responsestats = self::compute_question_response_stats($DB, $quizid, $totalquestions, count($totalquizattempted));
+
+        $catchart = chart_builder::questionpercategories(
+            $hardness['categoryname'],
+            $hardness['chartdata'],
+            $hardness['randomcolor']
+        );
+        $allusers = chart_builder::hardness(
+            $hardness['overallhardness'],
+            $hardness['wrongattemts'],
+            $hardness['categoryname'],
+            'hardcatalluser'
+        );
+        $loggedinuser = chart_builder::hardness(
+            $hardness['userhardness'],
+            $hardness['userswrongattemts'],
+            $hardness['categoryname'],
+            'hardcatlogginuser'
+        );
+        $snapshot = self::build_attempts_snapshot($DB, $quizid, $userid, $usersgradedattempts, $totalnoofquestion);
+
+        $totalarray = [
+            'questionPerCategories' => $catchart,
+            'allUsers' => $allusers,
+            'loggedInUser' => $loggedinuser,
+            'lastAttemptSummary' => self::build_last_attempt_summary($DB, $quizid, $userid, $lastattemptid->id),
+            'attemptssnapshot' => $snapshot,
+            'mixChart' => self::build_mix_chart($DB, $CFG, $quiz, $quizid, $userid),
+            'timeChart' => self::build_time_chart($DB, $quiz, $quizid, $userid, $totalquizattempted),
+            'gradeAnalysis' => self::build_grade_analysis($DB, $CFG, $quiz, $quizid),
+            'quesAnalysis' => chart_builder::question_analysis($responsestats),
+            'hardestQuestions' => chart_builder::hardest_questions($responsestats, count($totalquizattempted)),
+            'userAttempts' => count($usersgradedattempts),
+            'quizAttempt' => $quiz->attempts,
+            'allQuestions' => $responsestats['selectedquestionid'],
+            'quizid' => $quizid,
+            'lastUserQuizAttemptID' => $lastattemptid->id,
+            'url' => $CFG->wwwroot,
+        ];
+        return json_encode($totalarray);
+    }
+
+    /**
+     * Resolves the quiz's slots via qbank_helper, which is the core API mod_quiz itself uses to
+     * correctly resolve both fixed slots (via question_references) and random slots (via
+     * question_set_references, whose category lives in a JSON filtercondition) - hand-rolled joins
+     * through question_references alone would silently miss every random slot.
+     *
+     * @param \stdClass $quiz
+     * @return array [$slots, $totalnoofquestion, $realslots] - $realslots excludes description
+     *     slots, which aren't real questions; $totalnoofquestion is (object) ['qnum' => count].
+     */
+    private static function resolve_slots($quiz): array {
         $cm = get_coursemodule_from_instance('quiz', $quiz->id, $quiz->course, false, MUST_EXIST);
         $quizcontext = \context_module::instance($cm->id);
         $slots = \mod_quiz\question\bank\qbank_helper::get_question_structure($quiz->id, $quizcontext);
@@ -114,17 +188,26 @@ class get_analytics extends external_api {
         $realslots = array_filter($slots, function ($slot) {
             return $slot->qtype !== 'description';
         });
+        return [$slots, (object) ['qnum' => count($realslots)], $realslots];
+    }
 
-        $totalnoofquestion = (object) ['qnum' => count($realslots)];
-
+    /**
+     * Resolves each fixed/random slot's question_categories row into a per-category question
+     * count, using qbank_helper's own category ids rather than re-deriving them.
+     *
+     * @param \moodle_database $db
+     * @param array $realslots Non-description slots from resolve_slots().
+     * @return array Objects with id/qnum/name.
+     */
+    private static function get_question_categories($db, $realslots): array {
         $categorycounts = [];
         foreach ($realslots as $slot) {
             $categorycounts[$slot->category] = ($categorycounts[$slot->category] ?? 0) + 1;
         }
         $categorynames = [];
         if ($categorycounts) {
-            [$insql, $inparams] = $DB->get_in_or_equal(array_keys($categorycounts));
-            $categoryrecords = $DB->get_records_select('question_categories', "id $insql", $inparams, '', 'id, name');
+            [$insql, $inparams] = $db->get_in_or_equal(array_keys($categorycounts));
+            $categoryrecords = $db->get_records_select('question_categories', "id $insql", $inparams, '', 'id, name');
             foreach ($categoryrecords as $categoryrecord) {
                 $categorynames[$categoryrecord->id] = $categoryrecord->name;
             }
@@ -137,10 +220,26 @@ class get_analytics extends external_api {
                 'name' => $categorynames[$categoryid] ?? '',
             ];
         }
+        return $categorys;
+    }
+
+    /**
+     * Computes, for each question category, how many questions it has and how often those
+     * questions were answered wrong (both across all users, and for the given user alone).
+     *
+     * @param \moodle_database $db
+     * @param int $quizid
+     * @param int $userid
+     * @param array $categorys Objects with id/qnum/name, from get_question_categories().
+     * @param int $totalattempts Count of all finished, graded attempts at this quiz.
+     * @param int $userattempts Count of the given user's finished, graded attempts.
+     * @return array
+     */
+    private static function compute_category_hardness($db, $quizid, $userid, $categorys, $totalattempts, $userattempts): array {
         // Qatt.questionid is the actual question a user was given (even for a random slot, this is
         // already resolved to one concrete question), and each question row belongs to exactly one
         // question_versions row, so its category can be looked up directly - no slot/version
-        // resolution needed here, unlike $slots above.
+        // resolution needed here, unlike qbank_helper::get_question_structure() in execute().
         $sql = "SELECT qattstep.id as qattstepid, quizatt.id as quizattid, qatt.questionid,
                        qattstep.state, qattstep.sequencenumber
                   FROM {quiz_attempts} quizatt, {question_attempts} qatt, {question_attempt_steps} qattstep,
@@ -158,175 +257,91 @@ class get_analytics extends external_api {
             $categoryname[] = empty($category->name) ? 'category' : $category->name;
             $chartdata[] = empty($category->qnum) ? 1 : ($category->qnum);
             $randomcolor[] = "#" . self::random_color();
-            $correctattempts = $DB->get_records_sql($sql, [$quizid, $category->id, 'description']);
-            $userscorrectattempts = $DB->get_records_sql(
+            $correctattempts = $db->get_records_sql($sql, [$quizid, $category->id, 'description']);
+            $userscorrectattempts = $db->get_records_sql(
                 $sql . " AND quizatt.userid = ?",
                 [$quizid, $category->id, 'description', $userid]
             );
-            $categoryattempts = $category->qnum * count($totalquizattempted);
-            $categoryuserattempts = $category->qnum * count($usersgradedattempts);
+            $categoryattempts = $category->qnum * $totalattempts;
+            $categoryuserattempts = $category->qnum * $userattempts;
             $wrongattemts[] = ($categoryattempts - count($correctattempts));
             $userswrongattemts[] = ($categoryuserattempts - count($userscorrectattempts));
             $overallhardness[] = round(((($categoryattempts - count($correctattempts)) / $categoryattempts) * 100), 2);
             $userhardness[] = round(((($categoryuserattempts - count($userscorrectattempts)) / $categoryuserattempts) * 100), 2);
         }
-        /* questionpercat */
-        $questionpercategorydata = ['labels' => $categoryname, 'datasets' => [[
-            'label' => get_string('questionspercategory', 'gradereport_quizanalytics'),
-            'backgroundColor' => $randomcolor, 'data' => $chartdata,
-        ]]];
-        $questionpercategoryopt = ['legend' => [
-            'display' => false,
-            'position' => 'bottom', 'labels' => ['boxWidth' => 13],
-        ], 'title' => [
-            'display' => true,
-            'position' => 'bottom', 'text' => get_string('questionspercategory', 'gradereport_quizanalytics'),
-        ]];
-        /* allusers */
-        arsort($overallhardness);
-        $maxhardnesskeys = array_keys($overallhardness, max($overallhardness));
-        foreach ($maxhardnesskeys as $maxhardnesskey) {
-            $previous = $maxhardnesskey;
-            break;
-        }
-        $count = 0;
-        $randomcolor = $chartdata = $chartlabels = [];
-        foreach ($overallhardness as $key => $val) {
-            if ($wrongattemts[$key] > 0) {
-                if ($wrongattemts[$key] >= (($wrongattemts[$previous] * 20) / 100)) {
-                    if ($count < 10) {
-                        $chartdata[] = $val;
-                        $chartlabels[] = $categoryname[$key];
-                        $randomcolor[] = "#" . self::random_color();
-                        $count++;
-                    }
-                }
-            }
-            $previous = $key;
-        }
-        $allusersdata = [
-            'labels' => $chartlabels, 'datasets' => [
-                [
-                    'label' => get_string('hardness', 'gradereport_quizanalytics'),
-                    'backgroundColor' => $randomcolor,
-                    'data' => $chartdata,
-                ],
-            ],
+        return [
+            'categoryname' => $categoryname,
+            'chartdata' => $chartdata,
+            'randomcolor' => $randomcolor,
+            'wrongattemts' => $wrongattemts,
+            'userswrongattemts' => $userswrongattemts,
+            'overallhardness' => $overallhardness,
+            'userhardness' => $userhardness,
         ];
-        $allusersopt = ['legend' => [
-            'display' => false,
-            'position' => 'bottom',
-        ], 'title' => [
-            'display' => false,
-            'position' => 'bottom', 'text' => get_string('hardcatalluser', 'gradereport_quizanalytics'),
-        ]];
-        /* loggedinuser */
-        arsort($userhardness);
-        $hardnesskeys = array_keys($userhardness, max($userhardness));
-        foreach ($hardnesskeys as $hardnesskey) {
-            $previouskey = $hardnesskey;
-            break;
-        }
-        $count = 0;
-        $randomcolor = $chartdata = $chartlabels = [];
-        foreach ($userhardness as $key => $val) {
-            if ($userswrongattemts[$key] > 0) {
-                if ($userswrongattemts[$key] >= (($userswrongattemts[$previouskey] * 20) / 100)) {
-                    if ($count < 10) {
-                        $chartdata[] = $val;
-                        $chartlabels[] = $categoryname[$key];
-                        $randomcolor[] = "#" . self::random_color();
-                        $count++;
-                    }
-                }
-            }
-            $previouskey = $key;
-        }
-        $loggedinuserdata = [
-            'labels' => $chartlabels, 'datasets' => [
-                [
-                    'label' => get_string('hardness', 'gradereport_quizanalytics'),
-                    'backgroundColor' => $randomcolor, 'data' => $chartdata,
-                ],
-            ],
-        ];
-        $loggedinuseropt = ['legend' => [
-            'display' => false,
-            'position' => 'bottom',
-        ], 'title' => [
-            'display' => false,
-            'position' => 'bottom', 'text' => get_string('hardcatlogginuser', 'gradereport_quizanalytics'),
-        ]];
-        /* lastattemptsummary */
-        $lastattemptid = $DB->get_record_sql(
-            "SELECT quizatt.id
-               FROM {quiz_attempts} quizatt
-              WHERE quizatt.state = 'finished' AND quizatt.sumgrades IS NOT NULL
-                AND quizatt.quiz = ? AND quizatt.userid= ?
-           ORDER BY quizatt.id DESC LIMIT 1",
-            [$quizid, $userid]
-        );
+    }
+
+    /**
+     * Builds the "last attempt" bar chart: how the user's most recent finished, graded attempt
+     * broke down into correct / partially-correct / wrong / unattempted questions.
+     *
+     * @param \moodle_database $db
+     * @param int $quizid
+     * @param int $userid
+     * @param int $lastattemptid Id of the user's most recent finished, graded attempt.
+     * @return array 'data'/'opt' pair, both null if the user has no finished, graded attempt.
+     */
+    private static function build_last_attempt_summary($db, $quizid, $userid, $lastattemptid): array {
         $sql = "SELECT qatt.questionid, qattstep.state, qattstep.fraction, qatt.maxmark
                   FROM {quiz_attempts} quizatt, {question_attempts} qatt, {question_attempt_steps} qattstep
                  WHERE qatt.questionusageid = quizatt.uniqueid AND qattstep.questionattemptid = qatt.id
                    AND quizatt.userid = ? AND quizatt.id = ? AND quizatt.quiz = ? ";
-        $totalattempted = $DB->get_records_sql($sql . " AND qattstep.sequencenumber = 2", [$userid, $lastattemptid->id, $quizid]);
-        $rightattempt = $DB->get_records_sql(
+        $totalattempted = $db->get_records_sql($sql . " AND qattstep.sequencenumber = 2", [$userid, $lastattemptid, $quizid]);
+        if (empty($totalattempted)) {
+            return ['data' => null, 'opt' => null];
+        }
+        $rightattempt = $db->get_records_sql(
             $sql . " AND (qattstep.state = 'gradedright' OR qattstep.state = 'mangrright')",
-            [$userid, $lastattemptid->id, $quizid]
+            [$userid, $lastattemptid, $quizid]
         );
-        $partialcorrectattempt = $DB->get_records_sql(
+        $partialattempts = $db->get_records_sql(
             $sql . " AND (qattstep.state = 'gradedpartial' OR qattstep.state = 'mangrpartial')",
-            [$userid, $lastattemptid->id, $quizid]
+            [$userid, $lastattemptid, $quizid]
         );
-        $count = $totaluserscores = $totalquesmarks = 0;
-        if (!empty($partialcorrectattempt)) {
-            foreach ($partialcorrectattempt as $partialcorrect) {
+
+        $partiallycorrect = 0;
+        if (!empty($partialattempts)) {
+            $count = $totaluserscores = $totalquesmarks = 0;
+            foreach ($partialattempts as $partialcorrect) {
                 $count++;
-                $totaluserscores = $totaluserscores + $partialcorrect->fraction;
-                $totalquesmarks = $totalquesmarks + $partialcorrect->maxmark;
+                $totaluserscores += $partialcorrect->fraction;
+                $totalquesmarks += $partialcorrect->maxmark;
             }
             $partiallycorrect = $count * ((($totaluserscores / $totalquesmarks) * 100) / 100);
-        } else {
-            $partiallycorrect = 0;
         }
-        if (!empty($totalattempted)) {
-            $accuracyrate = ((count($rightattempt) + round($partiallycorrect)) / count($totalattempted)) * 100;
-        } else {
-            $accuracyrate = 0;
+        $accuracyrate = ((count($rightattempt) + round($partiallycorrect)) / count($totalattempted)) * 100;
+        $noofwronganswers = count($totalattempted) - count($rightattempt) - count($partialattempts);
+
+        $labels = [
+            get_string('noofquestionattempt', 'gradereport_quizanalytics'),
+            get_string('noofrightans', 'gradereport_quizanalytics'),
+        ];
+        $colors = ["#2EA0EF", "#79D527"];
+        $values = [count($totalattempted), count($rightattempt)];
+        if (!empty($partialattempts)) {
+            $labels[] = get_string('noofpartialcorrect', 'gradereport_quizanalytics');
+            $colors[] = "#FF9827";
+            $values[] = count($partialattempts);
         }
-        if (count($totalattempted) != 0) {
-            $noofwronganswers = count($totalattempted) - count($rightattempt) - count($partialcorrectattempt);
-            if (count($partialcorrectattempt) != 0) {
-                $lastattemptsummarydata = [
-                    'labels' => [
-                        get_string('noofquestionattempt', 'gradereport_quizanalytics'),
-                        get_string('noofrightans', 'gradereport_quizanalytics'),
-                        get_string('noofpartialcorrect', 'gradereport_quizanalytics'),
-                        get_string('noofwronganswers', 'gradereport_quizanalytics'),
-                    ],
-                    'datasets' => [[
-                        'backgroundColor' => ["#2EA0EF", "#79D527", "#FF9827", "#EB2838"],
-                        'data' => [
-                            count($totalattempted), count($rightattempt),
-                            count($partialcorrectattempt), $noofwronganswers,
-                        ],
-                    ]],
-                ];
-            } else {
-                $lastattemptsummarydata = [
-                    'labels' => [
-                        get_string('noofquestionattempt', 'gradereport_quizanalytics'),
-                        get_string('noofrightans', 'gradereport_quizanalytics'),
-                        get_string('noofwronganswers', 'gradereport_quizanalytics'),
-                    ],
-                    'datasets' => [[
-                        'backgroundColor' => ["#2EA0EF", "#79D527", "#EB2838"],
-                        'data' => [count($totalattempted), count($rightattempt), $noofwronganswers],
-                    ]],
-                ];
-            }
-            $lastattemptsummaryopt = [
+        $labels[] = get_string('noofwronganswers', 'gradereport_quizanalytics');
+        $colors[] = "#EB2838";
+        $values[] = $noofwronganswers;
+
+        return [
+            'data' => [
+                'labels' => $labels,
+                'datasets' => [['backgroundColor' => $colors, 'data' => $values]],
+            ],
+            'opt' => [
                 'legend' => ['display' => false],
                 'title' => ['display' => false], 'scales' => [
                     'xAxes' => [[
@@ -339,100 +354,128 @@ class get_analytics extends external_api {
                     ]],
                     'yAxes' => [['barPercentage' => 0.4]],
                 ],
-            ];
-        }
-        /* attemptssnapshot */
-        if (!empty($usersgradedattempts)) {
-            $count = 1;
-            $sql = "SELECT COUNT(qatt.questionid) as num
-                      FROM {quiz_attempts} quizatt, {question_attempts} qatt,
-                           {question_attempt_steps} qattstep, {question} q
-                     WHERE qatt.questionusageid = quizatt.uniqueid AND qattstep.sequencenumber = 2
-                       AND q.id = qatt.questionid AND qattstep.questionattemptid = qatt.id
-                       AND quizatt.userid = ? AND quizatt.quiz= ? AND q.qtype != ?
-                       AND quizatt.attempt = ? AND qattstep.state = ?";
-            foreach ($usersgradedattempts as $attemptvalue) {
-                $numofattempt = $DB->get_record_sql(
-                    "SELECT COUNT(qatt.questionid) as anum
-                       FROM {quiz_attempts} quizatt, {question_attempts} qatt,
-                            {question_attempt_steps} qattstep, {question} q
-                      WHERE qatt.questionusageid = quizatt.uniqueid AND q.id = qatt.questionid
-                        AND qattstep.questionattemptid = qatt.id AND qattstep.sequencenumber = 2
-                        AND quizatt.userid = ? AND quizatt.quiz= ? AND quizatt.attempt = ? AND q.qtype != ?",
-                    [$userid, $quizid, $attemptvalue->attempt, 'description']
-                );
-                $timetaken = round((($attemptvalue->timefinish - $attemptvalue->timestart) / 60), 2);
-                $unattempt = ($totalnoofquestion->qnum - $numofattempt->anum);
-                $correct = $DB->get_record_sql($sql, [$userid, $quizid, 'description', $attemptvalue->attempt, 'gradedright']);
-                $incorrect = $DB->get_record_sql($sql, [$userid, $quizid, 'description', $attemptvalue->attempt, 'gradedwrong']);
-                $partialcorrect = $DB->get_record_sql(
-                    $sql,
-                    [$userid, $quizid, 'description', $attemptvalue->attempt, 'gradedpartial']
-                );
-                $snapdata[$count][0] = intval($unattempt);
-                $snapdata[$count][1] = intval($correct->num);
-                $snapdata[$count][2] = intval($incorrect->num);
-                $snapdata[$count][3] = intval($partialcorrect->num);
-                $snapshotdata[$count] = [
-                    'labels' => [
-                        get_string('unattempted', 'gradereport_quizanalytics'),
-                        get_string('correct', 'gradereport_quizanalytics'),
-                        get_string('incorrect', 'gradereport_quizanalytics'),
-                        get_string('partialcorrect', 'gradereport_quizanalytics'),
-                    ],
-                    'datasets' => [[
-                        'label' => 'Attempt' . $count,
-                        'backgroundColor' => ['#3e95cd', '#3cba9f', '#8e5ea2', '#e8c3b9'],
-                        'data' => $snapdata[$count],
-                    ]],
-                ];
-                $snapshotopt[$count] = [
-                    'title' => [
-                        'display' => true,
-                        'position' => 'bottom', 'text' => get_string(
-                            'timetaken',
-                            'gradereport_quizanalytics'
-                        ) . $timetaken . 'min)',
-                    ],
-                    'legend' => [
-                        'display' => false, 'position' => 'bottom',
-                        'labels' => ['boxWidth' => 13],
-                    ],
-                ];
-                $count++;
-            }
-        } else {
-            $snapshotdata[1] = [
-                'labels' => [
-                    get_string('unattempted', 'gradereport_quizanalytics'),
-                    get_string('correct', 'gradereport_quizanalytics'),
-                    get_string('incorrect', 'gradereport_quizanalytics'),
-                    get_string('partialcorrect', 'gradereport_quizanalytics'),
-                ],
-                'datasets' => [[
+            ],
+        ];
+    }
+
+    /**
+     * Builds one doughnut chart per finished, graded attempt, breaking down how many questions
+     * were unattempted / correct / incorrect / partially correct in each.
+     *
+     * @param \moodle_database $db
+     * @param int $quizid
+     * @param int $userid
+     * @param array $usersgradedattempts The user's finished, graded quiz_attempts records.
+     * @param \stdClass $totalnoofquestion Object with a ->qnum property (the quiz's question count).
+     * @return array 'data'/'opt' pairs, keyed by attempt number.
+     */
+    private static function build_attempts_snapshot($db, $quizid, $userid, $usersgradedattempts, $totalnoofquestion): array {
+        $labels = [
+            get_string('unattempted', 'gradereport_quizanalytics'),
+            get_string('correct', 'gradereport_quizanalytics'),
+            get_string('incorrect', 'gradereport_quizanalytics'),
+            get_string('partialcorrect', 'gradereport_quizanalytics'),
+        ];
+
+        if (empty($usersgradedattempts)) {
+            return [
+                'data' => [1 => ['labels' => $labels, 'datasets' => [[
                     'label' => 'Attempt1',
                     'backgroundColor' => ['#3e95cd', '#3cba9f', '#8e5ea2', '#e8c3b9'],
                     'data' => [0, 0, 0, 0],
+                ]]]],
+                'opt' => [1 => ['title' => [
+                    'display' => true,
+                    'position' => 'bottom', 'text' => 'Attempts Snapshot( timetaken: 0min )',
+                ]]],
+            ];
+        }
+
+        $count = 1;
+        $data = $opt = [];
+        $sql = "SELECT COUNT(qatt.questionid) as num
+                  FROM {quiz_attempts} quizatt, {question_attempts} qatt,
+                       {question_attempt_steps} qattstep, {question} q
+                 WHERE qatt.questionusageid = quizatt.uniqueid AND qattstep.sequencenumber = 2
+                   AND q.id = qatt.questionid AND qattstep.questionattemptid = qatt.id
+                   AND quizatt.userid = ? AND quizatt.quiz= ? AND q.qtype != ?
+                   AND quizatt.attempt = ? AND qattstep.state = ?";
+        foreach ($usersgradedattempts as $attemptvalue) {
+            $numofattempt = $db->get_record_sql(
+                "SELECT COUNT(qatt.questionid) as anum
+                   FROM {quiz_attempts} quizatt, {question_attempts} qatt,
+                        {question_attempt_steps} qattstep, {question} q
+                  WHERE qatt.questionusageid = quizatt.uniqueid AND q.id = qatt.questionid
+                    AND qattstep.questionattemptid = qatt.id AND qattstep.sequencenumber = 2
+                    AND quizatt.userid = ? AND quizatt.quiz= ? AND quizatt.attempt = ? AND q.qtype != ?",
+                [$userid, $quizid, $attemptvalue->attempt, 'description']
+            );
+            $timetaken = round((($attemptvalue->timefinish - $attemptvalue->timestart) / 60), 2);
+            $unattempt = ($totalnoofquestion->qnum - $numofattempt->anum);
+            $correct = $db->get_record_sql($sql, [$userid, $quizid, 'description', $attemptvalue->attempt, 'gradedright']);
+            $incorrect = $db->get_record_sql($sql, [$userid, $quizid, 'description', $attemptvalue->attempt, 'gradedwrong']);
+            $partialcorrect = $db->get_record_sql(
+                $sql,
+                [$userid, $quizid, 'description', $attemptvalue->attempt, 'gradedpartial']
+            );
+            $data[$count] = [
+                'labels' => $labels,
+                'datasets' => [[
+                    'label' => 'Attempt' . $count,
+                    'backgroundColor' => ['#3e95cd', '#3cba9f', '#8e5ea2', '#e8c3b9'],
+                    'data' => [
+                        intval($unattempt), intval($correct->num),
+                        intval($incorrect->num), intval($partialcorrect->num),
+                    ],
                 ]],
             ];
-            $snapshotopt[1] = ['title' => [
-                'display' => true,
-                'position' => 'bottom', 'text' => 'Attempts Snapshot( timetaken: 0min )',
-            ]];
+            $opt[$count] = [
+                'title' => [
+                    'display' => true,
+                    'position' => 'bottom', 'text' => get_string(
+                        'timetaken',
+                        'gradereport_quizanalytics'
+                    ) . $timetaken . 'min)',
+                ],
+                'legend' => [
+                    'display' => false, 'position' => 'bottom',
+                    'labels' => ['boxWidth' => 13],
+                ],
+            ];
+            $count++;
         }
-        /* timechart */
-        if ($quiz->attempts == 1) {
-            $scores = $scoredata = [];
-            foreach ($totalquizattempted as $totalquizattempt) {
-                $scores[] = ($totalquizattempt->sumgrades / $quiz->sumgrades) * 100;
-            }
-            $userscore = $DB->get_record('quiz_attempts', ['quiz' => $quizid, 'userid' => $userid]);
-            $userscoredata = ($userscore->sumgrades / $quiz->sumgrades) * 100;
-            $scoredata[0] = round($userscoredata, 2);
-            $scoredata[1] = round(max($scores), 2);
-            $scoredata[2] = round((array_sum($scores) / count($scores)), 2);
-            $scoredata[3] = round(min($scores), 2);
-            $timechartdata = [
+        return ['data' => $data, 'opt' => $opt];
+    }
+
+    /**
+     * Builds the "peer scores" bar chart, shown instead of the improvement curve when the quiz
+     * only allows a single attempt (so there is no per-attempt trend to plot).
+     *
+     * @param \moodle_database $db
+     * @param \stdClass $quiz
+     * @param int $quizid
+     * @param int $userid
+     * @param array $totalquizattempted Every finished, graded quiz_attempts record for this quiz.
+     * @return array 'data'/'opt' pair, both null if the quiz allows more than one attempt.
+     */
+    private static function build_time_chart($db, $quiz, $quizid, $userid, $totalquizattempted): array {
+        if ($quiz->attempts != 1) {
+            return ['data' => null, 'opt' => null];
+        }
+        $scores = [];
+        foreach ($totalquizattempted as $totalquizattempt) {
+            $scores[] = ($totalquizattempt->sumgrades / $quiz->sumgrades) * 100;
+        }
+        $userscore = $db->get_record('quiz_attempts', ['quiz' => $quizid, 'userid' => $userid]);
+        $userscoredata = ($userscore->sumgrades / $quiz->sumgrades) * 100;
+        $scoredata = [
+            round($userscoredata, 2),
+            round(max($scores), 2),
+            round((array_sum($scores) / count($scores)), 2),
+            round(min($scores), 2),
+        ];
+        return [
+            'data' => [
                 'labels' => [
                     get_string('userscore', 'gradereport_quizanalytics'),
                     get_string('bestscore', 'gradereport_quizanalytics'),
@@ -443,30 +486,42 @@ class get_analytics extends external_api {
                     'label' => get_string('score', 'gradereport_quizanalytics'),
                     'backgroundColor' => "#3e95cd", 'data' => $scoredata,
                 ]],
-            ];
-            $timechartopt = [
+            ],
+            'opt' => [
                 'showTooltips' => false,
                 'legend' => ['display' => false],
                 'title' => ['display' => true, 'text' => get_string('peerscores', 'gradereport_quizanalytics')],
-            ];
-        }
-        /* mixchart */
-        $attemptcutoff = $DB->get_records_sql(
+            ],
+        ];
+    }
+
+    /**
+     * Builds the "improvement curve" line chart: the user's score on every attempt against the
+     * grade cut-off, extended out to the average number of attempts users need to reach it.
+     *
+     * @param \moodle_database $db
+     * @param \stdClass $cfg
+     * @param \stdClass $quiz
+     * @param int $quizid
+     * @param int $userid
+     * @return array 'data'/'opt' pair.
+     */
+    private static function build_mix_chart($db, $cfg, $quiz, $quizid, $userid): array {
+        $cutoffscore = ($quiz->sumgrades * $cfg->gradereport_quizanalytics_cutoff) / 100;
+        $attemptcutoff = $db->get_records_sql(
             "SELECT userid, MIN(attempt) as attempt
                FROM {quiz_attempts}
               WHERE state = 'finished' AND sumgrades IS NOT NULL AND quiz = ? AND sumgrades >= ?
            GROUP BY userid",
-            [$quizid, (($quiz->sumgrades * $CFG->gradereport_quizanalytics_cutoff) / 100)]
+            [$quizid, $cutoffscore]
         );
+        $attemptresult = [];
         foreach ($attemptcutoff as $torichcutoff) {
             $attemptresult[] = $torichcutoff->attempt;
         }
-        if (!empty($attemptresult)) {
-            $averageattempt = array_sum($attemptresult) / count($attemptresult);
-        } else {
-            $averageattempt = 0;
-        }
-        $usersattempts = $DB->get_records_sql(
+        $averageattempt = empty($attemptresult) ? 0 : (array_sum($attemptresult) / count($attemptresult));
+
+        $usersattempts = $db->get_records_sql(
             "SELECT * FROM {quiz_attempts} WHERE state = 'finished' AND quiz = ? AND userid = ?",
             [$quizid, $userid]
         );
@@ -474,96 +529,114 @@ class get_analytics extends external_api {
         $count = 1;
         foreach ($usersattempts as $usersattempt) {
             if (!empty($usersattempt->sumgrades)) {
-                array_push($attemptnum, $count);
-                array_push($scored, round($usersattempt->sumgrades, 2));
+                $attemptnum[] = $count;
+                $scored[] = round($usersattempt->sumgrades, 2);
             } else {
-                array_push($attemptnum, $count . '(NG)');
-                array_push($scored, 0);
+                $attemptnum[] = $count . '(NG)';
+                $scored[] = 0;
             }
             $count++;
         }
-        for ($i = 0; $i < $count; $i++) {
-            $cutoffarray[] = round((($quiz->sumgrades * $CFG->gradereport_quizanalytics_cutoff) / 100), 2);
-        }
+        $cutoffarray = array_fill(0, $count, round($cutoffscore, 2));
         if (round($averageattempt) >= $count) {
             for ($j = $count; $j <= round($averageattempt); $j++) {
-                array_push($attemptnum, $j);
+                $attemptnum[] = $j;
             }
         }
-        $mixchartdata = [
-            'labels' => $attemptnum,
-            'datasets' => [
-                [
-                    'label' => get_string('cutOffscore', 'gradereport_quizanalytics'),
-                    'borderColor' => "#3e95cd",
-                    'data' => $cutoffarray,
-                    'fill' => true,
-                ],
-                [
-                    'label' => get_string('score', 'gradereport_quizanalytics'),
-                    'borderColor' => "#8e5ea2",
-                    'data' => $scored,
-                    'fill' => false,
+        return [
+            'data' => [
+                'labels' => $attemptnum,
+                'datasets' => [
+                    [
+                        'label' => get_string('cutOffscore', 'gradereport_quizanalytics'),
+                        'borderColor' => "#3e95cd",
+                        'data' => $cutoffarray,
+                        'fill' => true,
+                    ],
+                    [
+                        'label' => get_string('score', 'gradereport_quizanalytics'),
+                        'borderColor' => "#8e5ea2",
+                        'data' => $scored,
+                        'fill' => false,
+                    ],
                 ],
             ],
-        ];
-        $mixchartopt = [
-            'title' => [
-                'display' => true, 'position' => 'bottom',
-                'text' => get_string('impandpredicanalysis', 'gradereport_quizanalytics'),
+            'opt' => [
+                'title' => [
+                    'display' => true, 'position' => 'bottom',
+                    'text' => get_string('impandpredicanalysis', 'gradereport_quizanalytics'),
+                ],
+                'legend' => ['display' => true, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
             ],
-            'legend' => ['display' => true, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
         ];
-        /* gradeanalysis */
-        $chartdata = $chartlabels = [];
+    }
+
+    /**
+     * Builds the "scores by percentage" pie chart: how many users' grades fall into each
+     * percentage band, using either the site-wide grade boundaries or this quiz's own feedback
+     * bands, depending on the "Set Globally" setting.
+     *
+     * @param \moodle_database $db
+     * @param \stdClass $cfg
+     * @param \stdClass $quiz
+     * @param int $quizid
+     * @return array 'data'/'opt' pair.
+     */
+    private static function build_grade_analysis($db, $cfg, $quiz, $quizid): array {
         $sql = "SELECT COUNT(qg.id) as numofstudents
                   FROM {quiz_grades} qg, {quiz} q
                  WHERE q.id = qg.quiz AND qg.quiz = ? AND qg.grade BETWEEN ? AND ?";
-        if ($CFG->gradereport_quizanalytics_globalboundary == 1) {
-            $gradeboundaries = explode(",", ($CFG->gradereport_quizanalytics_gradeboundary));
-            if (!empty($gradeboundaries)) {
-                foreach ($gradeboundaries as $gradeboundary) {
-                    $grades = explode("-", $gradeboundary);
-                    $mingrade = ($grades[0] * $quiz->grade) / 100;
-                    $maxgrade = ($grades[1] * $quiz->grade) / 100;
-                    $chartlabels[] = $mingrade . " - " . $maxgrade;
-                    $randomcolor[] = "#" . self::random_color();
-                    $userrecords = $DB->get_record_sql($sql, [$quizid, $mingrade, $maxgrade]);
-                    $chartdata[] = $userrecords->numofstudents;
-                }
+        $chartdata = $chartlabels = $randomcolor = [];
+        if ($cfg->gradereport_quizanalytics_globalboundary == 1) {
+            $gradeboundaries = explode(",", ($cfg->gradereport_quizanalytics_gradeboundary));
+            foreach ($gradeboundaries as $gradeboundary) {
+                $grades = explode("-", $gradeboundary);
+                $mingrade = ($grades[0] * $quiz->grade) / 100;
+                $maxgrade = ($grades[1] * $quiz->grade) / 100;
+                $chartlabels[] = $mingrade . " - " . $maxgrade;
+                $randomcolor[] = "#" . self::random_color();
+                $userrecords = $db->get_record_sql($sql, [$quizid, $mingrade, $maxgrade]);
+                $chartdata[] = $userrecords->numofstudents;
             }
         } else {
-            $feedbackrecs = $DB->get_records_sql("SELECT id, mingrade, maxgrade FROM {quiz_feedback} WHERE quizid = ?", [$quizid]);
+            $feedbackrecs = $db->get_records_sql("SELECT id, mingrade, maxgrade FROM {quiz_feedback} WHERE quizid = ?", [$quizid]);
             foreach ($feedbackrecs as $feedbackrec) {
                 $mingrade = round($feedbackrec->mingrade);
                 $maxgrade = round($feedbackrec->maxgrade) - 1;
                 $chartlabels[] = $mingrade . " - " . $maxgrade;
                 $randomcolor[] = "#" . self::random_color();
-                $userrecords = $DB->get_record_sql($sql, [$quizid, $mingrade, $maxgrade]);
+                $userrecords = $db->get_record_sql($sql, [$quizid, $mingrade, $maxgrade]);
                 $chartdata[] = $userrecords->numofstudents;
             }
         }
-        $gradeanalysisdata = ['labels' => $chartlabels, 'datasets' => [
-            [
-                'label' => get_string('noofstudents', 'gradereport_quizanalytics'),
-                'backgroundColor' => $randomcolor, 'data' => $chartdata,
+        return [
+            'data' => ['labels' => $chartlabels, 'datasets' => [
+                [
+                    'label' => get_string('noofstudents', 'gradereport_quizanalytics'),
+                    'backgroundColor' => $randomcolor, 'data' => $chartdata,
+                ],
+            ]],
+            'opt' => [
+                'title' => [
+                    'display' => true,
+                    'text' => get_string('noofstudents', 'gradereport_quizanalytics'), 'position' => 'bottom',
+                ],
+                'legend' => ['display' => false, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
             ],
-        ]];
-        $gradeanalysisopt = [
-            'title' => [
-                'display' => true,
-                'text' => get_string('noofstudents', 'gradereport_quizanalytics'), 'position' => 'bottom',
-            ],
-            'legend' => ['display' => false, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
         ];
-        /* quesanalysis */
-        // Random slots are deliberately excluded here (unlike $realslots above): each attempt
-        // draws a different concrete question for them, so there is no single "the question in
-        // this slot" to break out individually the way this section does for fixed slots.
-        $totalquestions = array_values(array_filter($slots, function ($slot) {
-            return $slot->qtype !== 'description' && $slot->qtype !== 'random' && $slot->qtype !== 'missingtype';
-        }));
-        $count = 1;
+    }
+
+    /**
+     * Computes, for each fixed (non-random) question in the quiz, how many attempts answered it
+     * correctly, incorrectly, or partially, and how many left it unattempted.
+     *
+     * @param \moodle_database $db
+     * @param int $quizid
+     * @param array $totalquestions Fixed-slot questions from qbank_helper::get_question_structure().
+     * @param int $totalattemptscount Count of all finished, graded attempts at this quiz.
+     * @return array
+     */
+    private static function compute_question_response_stats($db, $quizid, $totalquestions, $totalattemptscount): array {
         $sql = "SELECT COUNT(qatt.id) as qnum
                   FROM {question_attempts} qatt, {quiz_attempts} quizatt, {question_attempt_steps} qas
                  WHERE qas.questionattemptid = qatt.id AND quizatt.uniqueid = qatt.questionusageid
@@ -571,147 +644,42 @@ class get_analytics extends external_api {
                    AND qatt.questionid = ? AND";
         $userunattempted = $correctresponse = $incorrectresponse = $partialresponse = [];
         $questionlabels = $negativeattemptd = $queshardness = $selectedquestionid = [];
+        $count = 1;
         foreach ($totalquestions as $totalquestion) {
-            if ($totalquestion->qtype == 'essay') {
-                $sequencenumber = 3;
-            } else {
-                $sequencenumber = 2;
-            }
-            $usercorrectresponse = $DB->get_record_sql(
+            $sequencenumber = $totalquestion->qtype == 'essay' ? 3 : 2;
+            $correctcount = $db->get_record_sql(
                 $sql . " (qas.state = 'gradedright' OR qas.state = 'mangrright')",
                 [$sequencenumber, $quizid, $totalquestion->questionid]
-            );
-            $userincorrectresponse = $DB->get_record_sql(
+            )->qnum;
+            $incorrectcount = $db->get_record_sql(
                 $sql . " (qas.state = 'gradedwrong' OR qas.state = 'mangrwrong')",
                 [$sequencenumber, $quizid, $totalquestion->questionid]
-            );
-            $userpartialresponse = $DB->get_record_sql(
+            )->qnum;
+            $partialcount = $db->get_record_sql(
                 $sql . " (qas.state = 'gradedpartial' OR qas.state = 'mangrpartial')",
                 [$sequencenumber, $quizid, $totalquestion->questionid]
-            );
-            $respondedcount = $usercorrectresponse->qnum + $userincorrectresponse->qnum + $userpartialresponse->qnum;
-            $unattempted = count($totalquizattempted) - $respondedcount;
+            )->qnum;
+            $unattempted = $totalattemptscount - ($correctcount + $incorrectcount + $partialcount);
             $userunattempted[] = $unattempted;
-            $correctresponse[] = $usercorrectresponse->qnum;
-            $incorrectresponse[] = $userincorrectresponse->qnum;
-            $partialresponse[] = $userpartialresponse->qnum;
+            $correctresponse[] = $correctcount;
+            $incorrectresponse[] = $incorrectcount;
+            $partialresponse[] = $partialcount;
             $questionlabels[] = "Q" . $count;
-            $negativeattemptd[] = $unattempted + $userincorrectresponse->qnum;
-            $queshardness[] = round((($unattempted + $userincorrectresponse->qnum) / count($totalquizattempted)) * 100, 2);
+            $negativeattemptd[] = $unattempted + $incorrectcount;
+            $queshardness[] = round((($unattempted + $incorrectcount) / $totalattemptscount) * 100, 2);
             $selectedquestionid[] = "Q" . $count . "," . $totalquestion->questionid;
             $count++;
         }
-        arsort($queshardness);
-        $maxhardness = array_keys($queshardness, max($queshardness));
-        foreach ($maxhardness as $maxhardnesskey) {
-            $previous = $maxhardnesskey;
-            break;
-        }
-        $count = 0;
-        foreach ($queshardness as $key => $val) {
-            if ($negativeattemptd[$key] > 0) {
-                if ($negativeattemptd[$key] >= (($negativeattemptd[$previous] * 20) / 100)) {
-                    if ($count < 10) {
-                        $hardestquesdatalabel[] = $questionlabels[$key];
-                        $totalquizattemptdata[] = count($totalquizattempted);
-                        $negativeattemptdata[] = $negativeattemptd[$key];
-                        $count++;
-                    }
-                }
-            }
-            $previous = $key;
-        }
-        $hardestquesdata = ['labels' => $hardestquesdatalabel, 'datasets' => [
-            [
-                'label' => get_string('totalquizattempt', 'gradereport_quizanalytics'),
-                'backgroundColor' => "#8e5ea2", 'data' => $totalquizattemptdata,
-            ],
-            [
-                'label' => get_string('wrongandunattemptd', 'gradereport_quizanalytics'),
-                'backgroundColor' => "#EB2838", 'data' => $negativeattemptdata,
-            ],
-        ]];
-        $hardestquesopt = [
-            'title' => [
-                'display' => false,
-                'text' => get_string('hardestquestionschart', 'gradereport_quizanalytics'),
-            ],
-            'legend' => ['display' => true, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
-            'barPercentage' => 1.0,
-            'categoryPercentage' => 1.0,
+        return [
+            'questionlabels' => $questionlabels,
+            'correctresponse' => $correctresponse,
+            'incorrectresponse' => $incorrectresponse,
+            'partialresponse' => $partialresponse,
+            'userunattempted' => $userunattempted,
+            'negativeattemptd' => $negativeattemptd,
+            'queshardness' => $queshardness,
+            'selectedquestionid' => $selectedquestionid,
         ];
-        /*Quesanalysis*/
-        $quesanalysisdata = ['labels' => $questionlabels, 'datasets' => [
-            [
-                'data' => $correctresponse, 'borderColor' => "#3e95cd", 'fill' => false,
-                'label' => get_string('correct', 'gradereport_quizanalytics'),
-            ],
-            [
-                'data' => $incorrectresponse, 'borderColor' => "#8e5ea2", 'fill' => false,
-                'label' => get_string('incorrect', 'gradereport_quizanalytics'),
-            ],
-            [
-                'data' => $partialresponse, 'borderColor' => "#3cba9f",
-                'fill' => false, 'label' => get_string('partialcorrect', 'gradereport_quizanalytics'),
-            ],
-            [
-                'data' => $userunattempted, 'borderColor' => "#c45850", 'fill' => false,
-                'label' => get_string('unattempted', 'gradereport_quizanalytics'),
-            ],
-        ]];
-        $quesanalysisopt = [
-            'title' => ['display' => false],
-            'legend' => ['display' => true, 'position' => 'bottom', 'labels' => ['boxWidth' => 13]],
-        ];
-        $totalarray = [
-            'questionPerCategories' => [
-                'data' => $questionpercategorydata,
-                'opt' => $questionpercategoryopt,
-            ],
-            'allUsers' => [
-                'data' => $allusersdata,
-                'opt' => $allusersopt,
-            ],
-            'loggedInUser' => [
-                'data' => $loggedinuserdata,
-                'opt' => $loggedinuseropt,
-            ],
-            'lastAttemptSummary' => [
-                'data' => $lastattemptsummarydata,
-                'opt' => $lastattemptsummaryopt,
-            ],
-            'attemptssnapshot' => [
-                'data' => $snapshotdata,
-                'opt' => $snapshotopt,
-            ],
-            'mixChart' => [
-                'data' => $mixchartdata,
-                'opt' => $mixchartopt,
-            ],
-            'timeChart' => [
-                'data' => $timechartdata,
-                'opt' => $timechartopt,
-            ],
-            'gradeAnalysis' => [
-                'data' => $gradeanalysisdata,
-                'opt' => $gradeanalysisopt,
-            ],
-            'quesAnalysis' => [
-                'data' => $quesanalysisdata,
-                'opt' => $quesanalysisopt,
-            ],
-            'hardestQuestions' => [
-                'data' => $hardestquesdata,
-                'opt' => $hardestquesopt,
-            ],
-            'userAttempts' => count($usersgradedattempts),
-            'quizAttempt' => $quiz->attempts,
-            'allQuestions' => $selectedquestionid,
-            'quizid' => $quizid,
-            'lastUserQuizAttemptID' => $lastattemptid->id,
-            'url' => $CFG->wwwroot,
-        ];
-        return json_encode($totalarray);
     }
 
     /**
