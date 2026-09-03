@@ -163,8 +163,9 @@ if (!$quizzes) {
                 . '<select id="' . $selectid . '" class="userSelect"><option value="-1">'
                 . get_string('user_select', 'gradereport_quizanalytics') . '</option>';
             foreach ($attemptedusers as $attempteduser) {
+                $userdata = get_complete_user_data('id', $attempteduser->userid);
                 $select .= '<option value="' . $attempteduser->userid . '">'
-                    . get_complete_user_data('id', $attempteduser->userid)->username . '</option>';
+                    . fullname($userdata) . '</option>';
             }
             $select .= '</select>';
             $row[] = $select;
