@@ -14,6 +14,11 @@ module.exports = function (grunt) {
         stylelint: {
             options: {
                 configFile: '.stylelintrc.json',
+                // These rule names are stylelint's own legacy names for rules it later renamed
+                // or merged (this ruleset is adapted from Moodle core's, which sets this same
+                // option for the same reason) - without it, every run prints ~50 lines of noise
+                // about that regardless of whether the CSS itself has any real problems.
+                quietDeprecationWarnings: true,
             },
             css: {
                 src: ['css/*.css'],

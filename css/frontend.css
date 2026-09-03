@@ -44,22 +44,22 @@
 .showanalytics .tab-pane.active {
     display: block;
 }
-.showanalytics ul.nav-tabs li a {
-    border: 1px solid #ccc !important;
+.showanalytics.showanalytics ul.nav-tabs li a {
+    border: 1px solid #ccc;
     padding: .5em 1em;
 }
 .showanalytics .nav > li > a:hover,
 .showanalytics .nav > li > a:focus {
     background-color: transparent;
 }
-.showanalytics ul.nav-tabs li.tab a {
-    color: #333 !important;
-    background: #eee !important;
-    border: 1px solid #8fa7bc !important;
-    border-bottom: none !important;
+.showanalytics.showanalytics ul.nav-tabs li.tab a {
+    color: #333;
+    background: #eee;
+    border: 1px solid #8fa7bc;
+    border-bottom: none;
 }
-.showanalytics ul.nav-tabs li.tab a.active {
-    background: #fff !important;
+.showanalytics.showanalytics ul.nav-tabs li.tab a.active {
+    background: #fff;
     position: relative;
 }
 .showanalytics ul.nav-tabs li.tab a.active:after {
@@ -71,13 +71,13 @@
     bottom: -1px;
     left: 0;
 }
-.chart-legend ul {
+.chart-legend.chart-legend ul {
     width: auto;
     margin-left: 20%;
     display: inline-block;
     float: none;
     text-align: left;
-    border-bottom: none !important;
+    border-bottom: none;
 }
 .chart-legend ul li {
     display: inline-block;
@@ -98,8 +98,8 @@
     left: 0;
     top: 2px;
 }
-.strike {
-    text-decoration: line-through !important;
+.strike.strike {
+    text-decoration: line-through;
 }
 .download-canvas {
     display: inline-block;
@@ -120,12 +120,14 @@
     right: 15px;
     cursor: auto;
 }
-#subtab23 .attemptssnapshot {
+#subtab23#subtab23 .attemptssnapshot {
     position: relative;
-    padding-bottom: 20px !important;
+    padding-bottom: 20px;
 }
 .navbar .popover-region-toggle,
 .jsenabled .moodle-actionmenu[data-enhance] .toggle-display.textmenu {
+    /* stylelint-disable-next-line declaration-no-important -- overrides a Moodle-core [hidden]
+       utility rule that itself uses !important; specificity alone can't win against that. */
     display: inline !important;
 }
 .showanalytics,
@@ -141,15 +143,18 @@
 }
 #page-grade-report-quizanalytics-index .nav-collapse.collapse {
     display: block;
+    /* stylelint-disable-next-line declaration-no-important -- Bootstrap's collapse JS plugin sets
+       height directly as an inline style during its expand/collapse transition; inline styles
+       beat any CSS selector regardless of specificity, so only !important can override this. */
     height: auto !important;
 }
 
 @media (min-width: 768px) {
-    #subtab23 .attemptssnapshot {
-        padding-bottom: 15px !important;
+    #subtab23#subtab23 .attemptssnapshot {
+        padding-bottom: 15px;
     }
-    .showanalytics label {
-        margin-top: 0 !important;
+    .showanalytics.showanalytics label {
+        margin-top: 0;
     }
 }
 
@@ -161,17 +166,17 @@
 }
 
 @media (max-width: 1280px) {
-    #subtab23  .download {
+    #subtab23#subtab23  .download {
         position: relative;
-        top: -10px !important;
-        right: 0 !important;
+        top: -10px;
+        right: 0;
     }
 }
 
 @media (max-width: 1152px) {
-    .showanalytics .nav-tabs > li > a {
-        padding-right: 4px !important;
-        padding-left: 4px !important;
+    .showanalytics.showanalytics .nav-tabs > li > a {
+        padding-right: 4px;
+        padding-left: 4px;
         font-size: 13px;
     }
 }
@@ -191,9 +196,9 @@
     .showanalytics .tabbable ul.nav-tabs {
         padding-right: 3px;
     }
-    .showanalytics .nav-tabs > li > a {
-        padding-right: 10px !important;
-        padding-left: 10px !important;
+    .showanalytics.showanalytics .nav-tabs > li > a {
+        padding-right: 10px;
+        padding-left: 10px;
         font-size: 14px;
     }
 }
@@ -203,8 +208,8 @@
         position: relative;
         top: 10px;
     }
-    .showanalytics .tab-content .tab-pane .canvas-wrap label {
-        margin-top: 0 !important;
+    .showanalytics.showanalytics .tab-content .tab-pane .canvas-wrap label {
+        margin-top: 0;
     }
     .showanalytics .tab-content p {
         margin: 10px 0 10px;
@@ -221,9 +226,9 @@
     }
 }
 /**add for boost*/
-#page-grade-report-quizanalytics-index header.pos-f-t {
-    position: fixed !important;
-    margin-bottom: 0 !important;
+#page-grade-report-quizanalytics-index#page-grade-report-quizanalytics-index header.pos-f-t {
+    position: fixed;
+    margin-bottom: 0;
     padding: 7px 15px;
 }
 #page-grade-report-quizanalytics-index .container-fluid.navbar-nav {
@@ -274,17 +279,17 @@ button.btn-default {
 }
 
 @media (max-width: 767px) {
-    #page-grade-report-quizanalytics-index .navbar-nav .open .dropdown-menu {
-        background-color: #fff !important;
-        border: 1px solid #e2e2e2 !important;
+    #page-grade-report-quizanalytics-index#page-grade-report-quizanalytics-index .navbar-nav .open .dropdown-menu {
+        background-color: #fff;
+        border: 1px solid #e2e2e2;
         border-radius: unset;
     }
     #page-grade-report-quizanalytics-index header .navbar-nav .open .dropdown-menu {
         position: absolute;
         right: 0;
     }
-    #page-grade-report-quizanalytics-index .pos-f-t .navbar-nav {
-        margin: auto !important;
+    #page-grade-report-quizanalytics-index#page-grade-report-quizanalytics-index .pos-f-t .navbar-nav {
+        margin: auto;
     }
 }
 #gradereport-quizanalytics-review {
