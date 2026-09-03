@@ -119,6 +119,23 @@ define(
                     chartConvention.fillRect(0, 0, chart.width, chart.height);
                 }
             });
+            const userSelects = document.querySelectorAll('.userSelect');
+            userSelects.forEach((userSelect) => {
+                const viewAnalyticsLink = userSelect.parentNode.parentNode.querySelector(".viewanalytic");
+                // Dynamic styling for viewanalytics link based on .userSelect
+                if (viewAnalyticsLink && userSelect) {
+                    userSelect.addEventListener("change", function () {
+                        if (userSelect.value === '-1') {
+                            viewAnalyticsLink.style.pointerEvents = 'none';
+                            viewAnalyticsLink.style.color = '#999';
+                        }
+                        else {
+                            viewAnalyticsLink.style.pointerEvents = 'auto';
+                            viewAnalyticsLink.style.color = '';
+                        }
+                    });
+                }
+            });
             $(".viewanalytic").click(function () {
                 var quizid = $(this).data('quiz_id');
                 const [viewAnalytics] = $(this);
