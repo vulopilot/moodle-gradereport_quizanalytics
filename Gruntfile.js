@@ -81,6 +81,14 @@ module.exports = function (grunt) {
             fs.copyFileSync(chartSrc, chartDest);
             grunt.log.writeln(`✔ Copied chart.js → ${chartDest}`);
 
+            // DataTables' base styling (search box, length menu, pagination, sort icons) is
+            // likewise pulled from npm rather than hand-maintained, so it can't drift out of sync
+            // with the datatables.net JS version above the way a hand-copied file eventually would.
+            const dtCssSrc = path.join('node_modules', 'datatables.net-dt', 'css', 'dataTables.dataTables.css');
+            const dtCssDest = path.join('css', 'datatables.css');
+            fs.copyFileSync(dtCssSrc, dtCssDest);
+            grunt.log.writeln(`✔ Copied datatables.net-dt → ${dtCssDest}`);
+
             done();
         } catch (err) {
             grunt.log.error(err);

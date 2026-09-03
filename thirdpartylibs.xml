@@ -15,4 +15,11 @@
     <license>MIT</license>
     <licenseversion></licenseversion>
   </library>
+  <library>
+    <location>css/datatables.css</location>
+    <name>DataTables</name>
+    <version>3.0.2</version>
+    <license>MIT</license>
+    <licenseversion></licenseversion>
+  </library>
 </libraries>

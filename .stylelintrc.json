@@ -92,14 +92,5 @@
         "value-list-comma-space-after": "always-single-line",
         "value-list-comma-space-before": "never"
     },
-    "overrides": [
-        {
-            "files": ["css/datatables.css"],
-            "rules": {
-                "max-line-length": null,
-                "declaration-block-no-shorthand-property-overrides": null,
-                "declaration-no-important": null
-            }
-        }
-    ]
+    "ignoreFiles": ["css/datatables.css"]
 }

@@ -1,6 +1,23 @@
 #page-grade-report-quizanalytics-index .paging {
     padding: 10px 5px;
 }
+/* The quiz-list table renders plain first, then DataTable() (loaded async via AMD) enhances it
+   with paging/search a moment later - without this, that shows up as a visible flash from the
+   bare table to the enhanced one. Hiding it until DataTables adds its "dataTable" class avoids
+   that; the fallback animation forces it visible after 1s regardless, so the table still shows
+   up if the enhancement never runs (JS error, disabled JS, slow network). */
+@keyframes gradereport-quizanalytics-reveal-table {
+    to {
+        visibility: visible;
+    }
+}
+.display-table table {
+    visibility: hidden;
+    animation: gradereport-quizanalytics-reveal-table 0s linear 1s forwards;
+}
+.display-table table.dataTable {
+    visibility: visible;
+}
 .showanalytics {
     margin-top: 20px;
 }
