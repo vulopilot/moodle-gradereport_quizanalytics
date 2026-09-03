@@ -26,7 +26,7 @@
 $string['action'] = 'Action';
 $string['attemptsummary'] = 'Attempt Summary';
 $string['student_select'] = 'Student';
-$string['user_select'] = 'Select User';
+$string['user_select'] = 'All students';
 $string['myprogress'] = 'My Progress and Predictions';
 $string['questioncategory'] = 'Question Categories&#39; Analysis';
 $string['questionstats'] = 'Scores&#39; & Questions&#39; Stats';

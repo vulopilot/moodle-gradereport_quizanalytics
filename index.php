@@ -160,8 +160,7 @@ if (!$quizzes) {
         if (count($attemptsnotgraded) == count($attempts)) {
             $row[] = get_string('notgraded', 'gradereport_quizanalytics');
         } else {
-            $row[] = '<a ' . ($isstudent ? '' : 'style="pointer-events: none; color: #999" ')
-                . 'href="#" id="viewanalytic" class="viewanalytic" data-url="' . $CFG->wwwroot
+            $row[] = '<a href="#" id="viewanalytic" class="viewanalytic" data-url="' . $CFG->wwwroot
                 . '" data-quiz_id="' . $quiz->id . '" data-course_id="' . $courseid . '">'
                 . get_string('viewanalytics', 'gradereport_quizanalytics') . '</a>';
         }

@@ -89,9 +89,11 @@ class get_analytics extends external_api {
         self::validate_context($context);
         require_capability('gradereport/quizanalytics:view', $context);
 
-        if ($userid < 0) {
-            $userid = $USER->id;
-        }
+        // A negative userid means "no specific student" (the course-wide "All students" option) -
+        // left as-is rather than substituted with the viewer's own id, since the viewer (typically
+        // a teacher/admin with no quiz attempts of their own) is not who the requested analytics
+        // are about. Every "userid = ?" query below then simply matches no rows for it, which is
+        // the correct empty result for the individual-only sections of the report.
         if ($userid != $USER->id) {
             require_capability('moodle/grade:viewall', $context);
         }
@@ -119,6 +121,10 @@ class get_analytics extends external_api {
            ORDER BY quizatt.id DESC LIMIT 1",
             [$quizid, $userid]
         );
+        // False (no matching attempt - e.g. no student selected, or this user never attempted the
+        // quiz) is deliberately not treated as an error: it just means the individual-only sections
+        // below have nothing to report.
+        $lastattemptid = $lastattemptid ? $lastattemptid->id : null;
 
         // Random slots are deliberately excluded here (unlike $realslots above): each attempt
         // draws a different concrete question for them, so there is no single "the question in
@@ -151,7 +157,7 @@ class get_analytics extends external_api {
             'questionPerCategories' => $catchart,
             'allUsers' => $allusers,
             'loggedInUser' => $loggedinuser,
-            'lastAttemptSummary' => self::build_last_attempt_summary($DB, $quizid, $userid, $lastattemptid->id),
+            'lastAttemptSummary' => self::build_last_attempt_summary($DB, $quizid, $userid, $lastattemptid),
             'attemptssnapshot' => $snapshot,
             'mixChart' => self::build_mix_chart($DB, $CFG, $quiz, $quizid, $userid),
             'timeChart' => self::build_time_chart($DB, $quiz, $quizid, $userid, $totalquizattempted),
@@ -162,7 +168,7 @@ class get_analytics extends external_api {
             'quizAttempt' => $quiz->attempts,
             'allQuestions' => $responsestats['selectedquestionid'],
             'quizid' => $quizid,
-            'lastUserQuizAttemptID' => $lastattemptid->id,
+            'lastUserQuizAttemptID' => $lastattemptid,
             'url' => $CFG->wwwroot,
         ];
         return json_encode($totalarray);
@@ -293,7 +299,8 @@ class get_analytics extends external_api {
      * @param \moodle_database $db
      * @param int $quizid
      * @param int $userid
-     * @param int $lastattemptid Id of the user's most recent finished, graded attempt.
+     * @param int|null $lastattemptid Id of the user's most recent finished, graded attempt, or
+     *     null if there isn't one (e.g. no student selected).
      * @return array 'data'/'opt' pair, both null if the user has no finished, graded attempt.
      */
     private static function build_last_attempt_summary($db, $quizid, $userid, $lastattemptid): array {
