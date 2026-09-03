@@ -172,27 +172,6 @@ define(
                         rooturl = totalData.url;
                         if(totalData.lastUserQuizAttemptID)
                         lastUserQuizAttemptID = totalData.lastUserQuizAttemptID;
-                        $("#page-grade-report-quizanalytics-index").find(".btn-navbar").on("click",function() {
-                            $(this).toggleClass("active-drop");
-                            if ($(this).hasClass("active-drop")) {
-                                $("#page-grade-report-quizanalytics-index").find(".nav-collapse").show();
-                            } else {
-                                $("#page-grade-report-quizanalytics-index").find(".nav-collapse").hide();
-                            }
-                        });
-                        $("#page-grade-report-quizanalytics-index").find(".nav").find(".dropdown").on('click', function (event) {
-                            $(this).toggleClass('open');
-                        });
-                        $("#page-grade-report-quizanalytics-index").find(".nav").find(".dropdown").find('.dropdown-menu').find('.dropdown-submenu ').on("click",function(event) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            $(this).toggleClass('open');
-                        });
-                        $("#page-grade-report-quizanalytics-index").find(".nav").find(".dropdown").find('.dropdown-menu').find('.dropdown-submenu ').find('ul').find('li').find('a').on("click",function(event) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            window.open($(this).attr('href'), '_self');
-                        });
                         $(".showanalytics").find(".parentTabs").find("span.last-attempt").hide();
                         $(".showanalytics").find("#tabs-1").find("p.last-attempt-des").hide();
                         $(".showanalytics").find("#tabs-1").find("p.attempt-des").show();
@@ -201,41 +180,17 @@ define(
                             $(".showanalytics").find("#tabs-1").find("p.last-attempt-des").show();
                             $(".showanalytics").find("#tabs-1").find("p.attempt-des").hide();
                         }
-                        setTimeout(function () {
-                            $(".showanalytics").find("ul.nav-tabs a").click(function () {
-                                // $(this).tab('show') relied on Bootstrap's jQuery tab plugin,
-                                // which was removed in Bootstrap 5 - toggle the active tab and
-                                // its pane by hand instead so this doesn't depend on which
-                                // Bootstrap version the current theme happens to ship. No
-                                // preventDefault here: the href="#subtabXX" anchor jump is left
-                                // to run natively so the URL hash still updates for deep-linking.
-                                var tabgroup = $(this).closest("ul.nav-tabs");
-                                var panegroup = tabgroup.siblings(".tab-content").first();
-                                tabgroup.find("a").removeClass("active");
-                                $(this).addClass("active");
-                                panegroup.children(".tab-pane").removeClass("active show");
-                                $($(this).attr("href")).addClass("active show");
-                                // Center scroll on mobile.
-                                if ($(window).width() < 480) {
-                                    var outerContent = $('.mobile-overflow');
-                                    var innerContent = $('.canvas-wrap');
-                                    if (outerContent.length > 0) {
-                                        outerContent.scrollLeft((innerContent.width() - outerContent.width()) / 2);
-                                    }
-                                }
-                            });
-                        }, 100);
                         $(".showanalytics").css("display", "block");
                         if (totalData.quizAttempt != 1) {
                             $("#tabs-2").find("ul").find("li").find("span.improvementcurve").show();
                             $("#tabs-2").find("ul").find("li").find("span.peerperformance").hide();
                             $("#subtab21").find(".subtabmix").show();
-                            $("#subtab21").find(".subtabtimechart").hide();
+                            $("#subtab21").find(".subtabtimechart1").hide();
                         } else {
                             $("#tabs-2").find("ul").find("li").find("span.improvementcurve").hide();
                             $("#tabs-2").find("ul").find("li").find("span.peerperformance").show();
                             $("#subtab21").find(".subtabmix").hide();
-                            $("#subtab21").find(".subtabtimechart").show();
+                            $("#subtab21").find(".subtabtimechart1").show();
                         }
                         if (attemptsSnapshotArray.length > 0) {
                             $.each(attemptsSnapshotArray, function (i, v) {
@@ -676,6 +631,18 @@ define(
             $('body').on('click', '.download-canvas', function () {
                 var canvasId = $(this).data('canvas_id');
                 downloadCanvas(this, canvasId, canvasId + '.jpeg');
+            });
+            // Tab switching itself is handled by Bootstrap's own data-bs-toggle="tab" component
+            // (bundled and auto-initialised by the Moodle theme), not by this plugin - this just
+            // hooks its "shown.bs.tab" event to keep the mobile chart scroll centered afterwards.
+            $('body').on('shown.bs.tab', '.showanalytics [data-bs-toggle="tab"]', function () {
+                if ($(window).width() < 480) {
+                    var outerContent = $('.mobile-overflow');
+                    var innerContent = $('.canvas-wrap');
+                    if (outerContent.length > 0) {
+                        outerContent.scrollLeft((innerContent.width() - outerContent.width()) / 2);
+                    }
+                }
             });
             function downloadCanvas(link, canvasId, filename) {
                 link.href = document.getElementById(canvasId).toDataURL("image/jpeg");
