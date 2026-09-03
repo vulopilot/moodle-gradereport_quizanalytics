@@ -4,9 +4,10 @@ const { minify } = require('terser');
 
 module.exports = function (grunt) {
     // moodle-plugin-ci's "grunt" CI check always runs a fixed task list - amd, yui,
-    // gherkinlint, stylelint - skipping whichever ones don't apply to this plugin. Since we
-    // ship plain CSS (no yui/, no Behat features), "stylelint" is the only one of those we
-    // need to actually provide; grunt-stylelint registers it once loaded below, driven by the
+    // gherkinlint, stylelint - skipping whichever ones don't apply to this plugin. gherkinlint
+    // is invoked by moodle-plugin-ci itself against tests/behat/*.feature, not through Grunt, and
+    // we ship no yui/ directory, so "stylelint" is the only one of those we need to actually
+    // provide here; grunt-stylelint registers it once loaded below, driven by the
     // .stylelintrc.json ruleset (adapted from Moodle core's own, minus the SCSS-only bits we
     // don't need since this plugin has no .scss files).
     grunt.loadNpmTasks('grunt-stylelint');

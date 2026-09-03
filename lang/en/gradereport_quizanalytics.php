@@ -118,3 +118,11 @@ $string['cutOffscore'] = 'Cut Off Score';
 $string['score'] = 'Score';
 $string['questionnumber'] = 'Question Number';
 $string['questionreview'] = "(Click to Review Question & Last Attempt)";
+// Events.
+$string['eventgradereportviewed'] = 'Quiz analytics report viewed';
+// Privacy.
+$string['privacy:metadata:core_question'] = 'The Quiz Analytics report reads question attempt data '
+    . '(e.g. which questions were answered correctly, incorrectly, or left unattempted, and how long '
+    . 'attempts took) to build its charts for teachers and admins. It also reads quiz attempt records '
+    . '(grade, state, timing) owned by the quiz activity. This report never stores, exports, or deletes '
+    . 'any of this data itself - the question engine and the quiz activity remain responsible for it.';

@@ -66,6 +66,13 @@ if (!$access) {
     throw new moodle_exception('nopermissiontoviewgrades', 'error', $CFG->wwwroot . '/course/view.php?id=' . $courseid);
 }
 
+$event = \gradereport_quizanalytics\event\grade_report_viewed::create([
+    'context' => $context,
+    'courseid' => $courseid,
+    'relateduserid' => $userid,
+]);
+$event->trigger();
+
 $roles = get_user_roles($context, $userid, false);
 $role = reset($roles);
 $isstudent = $role && $role->shortname === 'student';

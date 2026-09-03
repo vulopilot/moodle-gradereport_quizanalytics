@@ -25,7 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-if (is_siteadmin()) {
+if ($ADMIN->fulltree) {
     $settings->add(
         new admin_setting_configtext(
             'gradereport_quizanalytics_cutoff',
