@@ -154,8 +154,13 @@ if (!$quizzes) {
                   WHERE state = 'finished' AND sumgrades IS NOT NULL AND attempt = 1 AND quiz = ?",
                 [$quiz->id]
             );
-            $select = '<select class="userSelect" aria-label="'
-                . get_string('student_select', 'gradereport_quizanalytics') . '"><option value="-1">'
+            // A visually-hidden <label> (rather than just aria-label) gives the select a real
+            // accessible name recognised consistently by both screen readers and Behat's generic
+            // field-locator steps, without visually duplicating the "Student" column header.
+            $selectid = 'gradereport-quizanalytics-userselect-' . $quiz->id;
+            $select = '<label for="' . $selectid . '" class="visually-hidden">'
+                . get_string('student_select', 'gradereport_quizanalytics') . '</label>'
+                . '<select id="' . $selectid . '" class="userSelect"><option value="-1">'
                 . get_string('user_select', 'gradereport_quizanalytics') . '</option>';
             foreach ($attemptedusers as $attempteduser) {
                 $select .= '<option value="' . $attempteduser->userid . '">'
