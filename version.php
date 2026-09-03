@@ -26,7 +26,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->version = 2026090300; // The current plugin version (Date: YYYYMMDDXX).
-$plugin->requires  = 2025041410;        // Requires Moodle version 5.0.
+$plugin->requires  = 2025041400;        // Requires Moodle version 5.0.
 // Tested against Moodle 5.0 through 5.3, including the 5.3dev branch (branches 500-530).
 $plugin->supported = [500, 530];
 $plugin->component = 'gradereport_quizanalytics'; // Full name of the plugin (used for diagnostics).
