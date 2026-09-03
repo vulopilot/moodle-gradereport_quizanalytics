@@ -20,7 +20,7 @@ namespace gradereport_quizanalytics\output;
  * Renderer for the quizanalytics gradebook report.
  *
  * @package   gradereport_quizanalytics
- * @copyright Dualcube (https://dualcube.com)
+ * @copyright 2026 DualCube (https://dualcube.com)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class renderer extends \plugin_renderer_base {
@@ -35,13 +35,13 @@ class renderer extends \plugin_renderer_base {
         global $CFG;
 
         return [
-            'tabs-1' => !isset($CFG->gradereport_quizanalytics_showattemptsummarytab)
+            'attempt-summary' => !isset($CFG->gradereport_quizanalytics_showattemptsummarytab)
                 || $CFG->gradereport_quizanalytics_showattemptsummarytab,
-            'tabs-2' => !isset($CFG->gradereport_quizanalytics_showmyprogresstab)
+            'my-progress' => !isset($CFG->gradereport_quizanalytics_showmyprogresstab)
                 || $CFG->gradereport_quizanalytics_showmyprogresstab,
-            'tabs-3' => !isset($CFG->gradereport_quizanalytics_showquestioncategorytab)
+            'question-categories' => !isset($CFG->gradereport_quizanalytics_showquestioncategorytab)
                 || $CFG->gradereport_quizanalytics_showquestioncategorytab,
-            'tabs-4' => !isset($CFG->gradereport_quizanalytics_showquestionstatstab)
+            'question-stats' => !isset($CFG->gradereport_quizanalytics_showquestionstatstab)
                 || $CFG->gradereport_quizanalytics_showquestionstatstab,
         ];
     }
@@ -53,11 +53,11 @@ class renderer extends \plugin_renderer_base {
      */
     private function get_tab_nav_labels(): array {
         return [
-            'tabs-1' => '<span class="last-attempt">Last </span>'
+            'attempt-summary' => '<span class="last-attempt">Last </span>'
                 . get_string('attemptsummary', 'gradereport_quizanalytics'),
-            'tabs-2' => get_string('myprogress', 'gradereport_quizanalytics'),
-            'tabs-3' => get_string('questioncategory', 'gradereport_quizanalytics'),
-            'tabs-4' => get_string('questionstats', 'gradereport_quizanalytics'),
+            'my-progress' => get_string('myprogress', 'gradereport_quizanalytics'),
+            'question-categories' => get_string('questioncategory', 'gradereport_quizanalytics'),
+            'question-stats' => get_string('questionstats', 'gradereport_quizanalytics'),
         ];
     }
 
@@ -68,22 +68,22 @@ class renderer extends \plugin_renderer_base {
      */
     private function get_tab_panes(): array {
         return [
-            'tabs-1' => $this->get_attempt_summary_pane(),
-            'tabs-2' => $this->get_my_progress_pane(),
-            'tabs-3' => $this->get_question_category_pane(),
-            'tabs-4' => $this->get_question_stats_pane(),
+            'attempt-summary' => $this->get_attempt_summary_pane(),
+            'my-progress' => $this->get_my_progress_pane(),
+            'question-categories' => $this->get_question_category_pane(),
+            'question-stats' => $this->get_question_stats_pane(),
         ];
     }
 
     /**
-     * Returns the "Attempt Summary" pane markup (tabs-1).
+     * Returns the "Attempt Summary" pane markup (attempt-summary).
      *
      * @return string
      */
     private function get_attempt_summary_pane(): string {
         return '
-                                <div class="tab-pane mobile-overflow fade" id="tabs-1" role="tabpanel"
-                                     aria-labelledby="tabs-1-tab">
+                                <div class="tab-pane mobile-overflow fade" id="attempt-summary" role="tabpanel"
+                                     aria-labelledby="attempt-summary-tab">
                                     <div class="canvas-wrap"><label style="width:850px;">
                                         <canvas id="lastAttempt"></canvas>
                                     </label></div>
@@ -95,19 +95,19 @@ class renderer extends \plugin_renderer_base {
     }
 
     /**
-     * Returns the "My Progress and Predictions" pane markup (tabs-2).
+     * Returns the "My Progress and Predictions" pane markup (my-progress).
      *
      * @return string
      */
     private function get_my_progress_pane(): string {
         return '
-                                <div class="tab-pane mobile-overflow fade" id="tabs-2" role="tabpanel"
-                                     aria-labelledby="tabs-2-tab">
+                                <div class="tab-pane mobile-overflow fade" id="my-progress" role="tabpanel"
+                                     aria-labelledby="my-progress-tab">
                                     <div class="tabbable">
                                         <ul class="nav nav-tabs" role="tablist">
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link active" id="subtab21-tab" data-bs-toggle="tab"
-                                                   href="#subtab21" role="tab" aria-controls="subtab21"
+                                                <a class="nav-link active" id="improvement-curve-tab" data-bs-toggle="tab"
+                                                   href="#improvement-curve" role="tab" aria-controls="improvement-curve"
                                                    aria-selected="true">
                                                 <span class="improvementcurve">'
                                                     . get_string('improvementcurve', 'gradereport_quizanalytics') . '</span>
@@ -115,19 +115,19 @@ class renderer extends \plugin_renderer_base {
                                                     . get_string('peerperformance', 'gradereport_quizanalytics') . '</span>
                                             </a></li>
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link" id="subtab22-tab" data-bs-toggle="tab"
-                                                   href="#subtab22" role="tab" aria-controls="subtab22"
+                                                <a class="nav-link" id="hardest-question-tab" data-bs-toggle="tab"
+                                                   href="#hardest-question" role="tab" aria-controls="hardest-question"
                                                    aria-selected="false">'
                                                 . get_string('hardestquestion', 'gradereport_quizanalytics') . '</a></li>
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link" id="subtab23-tab" data-bs-toggle="tab"
-                                                   href="#subtab23" role="tab" aria-controls="subtab23"
+                                                <a class="nav-link" id="attempt-snapshot-tab" data-bs-toggle="tab"
+                                                   href="#attempt-snapshot" role="tab" aria-controls="attempt-snapshot"
                                                    aria-selected="false">'
                                                 . get_string('attemptsnapshot', 'gradereport_quizanalytics') . '</a></li>
                                         </ul>
                                         <div class="tab-content">
-                                            <div id="subtab21" class="tab-pane fade mobile-overflow active show"
-                                                 role="tabpanel" aria-labelledby="subtab21-tab">
+                                            <div id="improvement-curve" class="tab-pane fade mobile-overflow active show"
+                                                 role="tabpanel" aria-labelledby="improvement-curve-tab">
                                                 <div class="subtabmix">
                                                     <div class="canvas-wrap">
                                                         <label style="width:700px;">
@@ -145,15 +145,15 @@ class renderer extends \plugin_renderer_base {
                                                     <p>' . get_string('timechartdes', 'gradereport_quizanalytics') . '</p>
                                                 </div>
                                             </div>
-                                            <div id="subtab22" class="tab-pane fade mobile-overflow"
-                                                 role="tabpanel" aria-labelledby="subtab22-tab">
+                                            <div id="hardest-question" class="tab-pane fade mobile-overflow"
+                                                 role="tabpanel" aria-labelledby="hardest-question-tab">
                                                 <div class="canvas-wrap"><label style="width:700px;">
                                                     <canvas id="hardest-questions"></canvas>
                                                 </label></div>
                                                 <p>' . get_string('hardestquesdes', 'gradereport_quizanalytics') . '</p>
                                             </div>
-                                            <div id="subtab23" class="tab-pane fade mobile-overflow"
-                                                 role="tabpanel" aria-labelledby="subtab23-tab">
+                                            <div id="attempt-snapshot" class="tab-pane fade mobile-overflow"
+                                                 role="tabpanel" aria-labelledby="attempt-snapshot-tab">
                                                 <div class=" attemptssnapshot"></div>
                                                 <p>' . get_string('attemptssnapshotdes', 'gradereport_quizanalytics') . '</p>
                                             </div>
@@ -163,51 +163,51 @@ class renderer extends \plugin_renderer_base {
     }
 
     /**
-     * Returns the "Question Categories' Analysis" pane markup (tabs-3).
+     * Returns the "Question Categories' Analysis" pane markup (question-categories).
      *
      * @return string
      */
     private function get_question_category_pane(): string {
         return '
-                                <div class="tab-pane mobile-overflow fade" id="tabs-3" role="tabpanel"
-                                     aria-labelledby="tabs-3-tab">
+                                <div class="tab-pane mobile-overflow fade" id="question-categories" role="tabpanel"
+                                     aria-labelledby="question-categories-tab">
                                     <div class="tabbable">
                                         <ul class="nav nav-tabs" role="tablist">
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link active" id="subtab31-tab" data-bs-toggle="tab"
-                                                   href="#subtab31" role="tab" aria-controls="subtab31"
+                                                <a class="nav-link active" id="question-per-category-tab" data-bs-toggle="tab"
+                                                   href="#question-per-category" role="tab" aria-controls="question-per-category"
                                                    aria-selected="true">'
                                                     . get_string('questionpercategory', 'gradereport_quizanalytics') . '</a>
                                             </li>
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link" id="subtab32-tab" data-bs-toggle="tab"
-                                                   href="#subtab32" role="tab" aria-controls="subtab32"
+                                                <a class="nav-link" id="hard-categories-all-tab" data-bs-toggle="tab"
+                                                   href="#hard-categories-all" role="tab" aria-controls="hard-categories-all"
                                                    aria-selected="false">'
                                                     . get_string('challengingcategoris', 'gradereport_quizanalytics') . '</a>
                                             </li>
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link" id="subtab33-tab" data-bs-toggle="tab"
-                                                   href="#subtab33" role="tab" aria-controls="subtab33"
+                                                <a class="nav-link" id="hard-categories-me-tab" data-bs-toggle="tab"
+                                                   href="#hard-categories-me" role="tab" aria-controls="hard-categories-me"
                                                    aria-selected="false">'
                                                     . get_string('challengingcategorisforme', 'gradereport_quizanalytics') . '</a>
                                             </li>
                                         </ul>
                                         <div class="tab-content">
-                                            <div id="subtab31" class="tab-pane fade mobile-overflow active show"
-                                                 role="tabpanel" aria-labelledby="subtab31-tab">
+                                            <div id="question-per-category" class="tab-pane fade mobile-overflow active show"
+                                                 role="tabpanel" aria-labelledby="question-per-category-tab">
                                                 <label style="width:400px; margin: 0 auto;">
                                                 <canvas id="questionpercategories"></canvas>
                                                 <div id="js-legendqpc" class="chart-legend"></div></label>
                                                 <p>' . get_string('questionpercatdes', 'gradereport_quizanalytics') . '</p>
                                             </div>
-                                            <div id="subtab32" class="tab-pane fade mobile-overflow"
-                                                 role="tabpanel" aria-labelledby="subtab32-tab">
+                                            <div id="hard-categories-all" class="tab-pane fade mobile-overflow"
+                                                 role="tabpanel" aria-labelledby="hard-categories-all-tab">
                                                <div class="canvas-wrap"><label style="width:700px;"><canvas id="allusers"></canvas>
                                                 </label></div>
                                                 <p>' . get_string('allusersdes', 'gradereport_quizanalytics') . '</p>
                                             </div>
-                                            <div id="subtab33" class="tab-pane fade mobile-overflow"
-                                                 role="tabpanel" aria-labelledby="subtab33-tab">
+                                            <div id="hard-categories-me" class="tab-pane fade mobile-overflow"
+                                                 role="tabpanel" aria-labelledby="hard-categories-me-tab">
                                                 <div class="canvas-wrap"><label style="width:700px;">
                                                 <canvas id="loggedinuser"></canvas></label></div>
                                                 <p>' . get_string('loggedinuserdes', 'gradereport_quizanalytics') . '</p>
@@ -218,38 +218,38 @@ class renderer extends \plugin_renderer_base {
     }
 
     /**
-     * Returns the "Scores' & Questions' Stats" pane markup (tabs-4).
+     * Returns the "Scores' & Questions' Stats" pane markup (question-stats).
      *
      * @return string
      */
     private function get_question_stats_pane(): string {
         return '
-                                <div class="tab-pane mobile-overflow fade" id="tabs-4" role="tabpanel"
-                                     aria-labelledby="tabs-4-tab">
+                                <div class="tab-pane mobile-overflow fade" id="question-stats" role="tabpanel"
+                                     aria-labelledby="question-stats-tab">
                                     <div class="tabbable">
                                         <ul class="nav nav-tabs" role="tablist">
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link active" id="subtab41-tab" data-bs-toggle="tab"
-                                                   href="#subtab41" role="tab" aria-controls="subtab41"
+                                                <a class="nav-link active" id="grade-analysis-tab" data-bs-toggle="tab"
+                                                   href="#grade-analysis" role="tab" aria-controls="grade-analysis"
                                                    aria-selected="true">'
                                                     . get_string('scorbrpercent', 'gradereport_quizanalytics') . '</a>
                                             </li>
                                             <li class="nav-item" role="presentation">
-                                                <a class="nav-link" id="subtab42-tab" data-bs-toggle="tab"
-                                                   href="#subtab42" role="tab" aria-controls="subtab42"
+                                                <a class="nav-link" id="question-analysis-tab" data-bs-toggle="tab"
+                                                   href="#question-analysis" role="tab" aria-controls="question-analysis"
                                                    aria-selected="false">'
                                                     . get_string('quesanalysis', 'gradereport_quizanalytics') . '</a>
                                             </li>
                                         </ul>
                                         <div class="tab-content">
-                                            <div id="subtab41" class="tab-pane fade mobile-overflow active show"
-                                                 role="tabpanel" aria-labelledby="subtab41-tab">
+                                            <div id="grade-analysis" class="tab-pane fade mobile-overflow active show"
+                                                 role="tabpanel" aria-labelledby="grade-analysis-tab">
                                                 <label style="width:400px; margin: 0 auto;"><canvas id="gradeanalysis"></canvas>
                                                 <div id="js-legendgrade" class="chart-legend"></div></label>
                                                 <p>' . get_string('gradeanalysisdes', 'gradereport_quizanalytics') . '</p>
                                             </div>
-                                            <div id="subtab42" class="tab-pane fade mobile-overflow"
-                                                 role="tabpanel" aria-labelledby="subtab42-tab">
+                                            <div id="question-analysis" class="tab-pane fade mobile-overflow"
+                                                 role="tabpanel" aria-labelledby="question-analysis-tab">
                                                 <div class="canvas-wrap"><label style="width:700px;">
                                                 <canvas id="questionanalysis"></canvas></label></div>
                                                 <p>' . get_string('quesananalysisdes', 'gradereport_quizanalytics') . '</p>

@@ -19,7 +19,7 @@
  *
  * @package   gradereport_quizanalytics
  * @author    DualCube <admin@dualcube.com>
- * @copyright Dualcube (https://dualcube.com)
+ * @copyright 2026 DualCube (https://dualcube.com)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 

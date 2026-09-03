@@ -17,7 +17,7 @@
  * Renders the quiz analytics charts and wires up the report's UI.
  *
  * @module     gradereport_quizanalytics/analytic
- * @copyright  Dualcube (https://dualcube.com)
+ * @copyright 2026 DualCube (https://dualcube.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define(
@@ -172,24 +172,24 @@ define(
                         if(totalData.lastUserQuizAttemptID)
                         lastUserQuizAttemptID = totalData.lastUserQuizAttemptID;
                         $(".showanalytics").find(".parentTabs").find("span.last-attempt").hide();
-                        $(".showanalytics").find("#tabs-1").find("p.last-attempt-des").hide();
-                        $(".showanalytics").find("#tabs-1").find("p.attempt-des").show();
+                        $(".showanalytics").find("#attempt-summary").find("p.last-attempt-des").hide();
+                        $(".showanalytics").find("#attempt-summary").find("p.attempt-des").show();
                         if (totalData.userAttempts > 1) {
                             $(".showanalytics").find(".parentTabs").find("span.last-attempt").show();
-                            $(".showanalytics").find("#tabs-1").find("p.last-attempt-des").show();
-                            $(".showanalytics").find("#tabs-1").find("p.attempt-des").hide();
+                            $(".showanalytics").find("#attempt-summary").find("p.last-attempt-des").show();
+                            $(".showanalytics").find("#attempt-summary").find("p.attempt-des").hide();
                         }
                         $(".showanalytics").css("display", "block");
                         if (totalData.quizAttempt != 1) {
-                            $("#tabs-2").find("ul").find("li").find("span.improvementcurve").show();
-                            $("#tabs-2").find("ul").find("li").find("span.peerperformance").hide();
-                            $("#subtab21").find(".subtabmix").show();
-                            $("#subtab21").find(".subtabtimechart1").hide();
+                            $("#my-progress").find("ul").find("li").find("span.improvementcurve").show();
+                            $("#my-progress").find("ul").find("li").find("span.peerperformance").hide();
+                            $("#improvement-curve").find(".subtabmix").show();
+                            $("#improvement-curve").find(".subtabtimechart1").hide();
                         } else {
-                            $("#tabs-2").find("ul").find("li").find("span.improvementcurve").hide();
-                            $("#tabs-2").find("ul").find("li").find("span.peerperformance").show();
-                            $("#subtab21").find(".subtabmix").hide();
-                            $("#subtab21").find(".subtabtimechart1").show();
+                            $("#my-progress").find("ul").find("li").find("span.improvementcurve").hide();
+                            $("#my-progress").find("ul").find("li").find("span.peerperformance").show();
+                            $("#improvement-curve").find(".subtabmix").hide();
+                            $("#improvement-curve").find(".subtabtimechart1").show();
                         }
                         if (attemptsSnapshotArray.length > 0) {
                             $.each(attemptsSnapshotArray, function (i, v) {

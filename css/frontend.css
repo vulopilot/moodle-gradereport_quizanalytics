@@ -111,7 +111,7 @@
     right: 15px;
     cursor: auto;
 }
-#subtab23#subtab23 .attemptssnapshot {
+#attempt-snapshot#attempt-snapshot .attemptssnapshot {
     position: relative;
     padding-bottom: 20px;
 }
@@ -134,7 +134,7 @@
 }
 
 @media (min-width: 768px) {
-    #subtab23#subtab23 .attemptssnapshot {
+    #attempt-snapshot#attempt-snapshot .attemptssnapshot {
         padding-bottom: 15px;
     }
     .showanalytics.showanalytics label {
@@ -143,14 +143,14 @@
 }
 
 @media (max-width: 1500px) {
-    #subtab23 .download {
+    #attempt-snapshot .download {
         top: 5px;
         right: -15px;
     }
 }
 
 @media (max-width: 1280px) {
-    #subtab23#subtab23  .download {
+    #attempt-snapshot#attempt-snapshot  .download {
         position: relative;
         top: -10px;
         right: 0;

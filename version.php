@@ -19,16 +19,16 @@
  *
  * @package   gradereport_quizanalytics
  * @author    DualCube <admin@dualcube.com>
- * @copyright Dualcube (https://dualcube.com)
+ * @copyright 2026 DualCube (https://dualcube.com)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026090306; // The current plugin version (Date: YYYYMMDDXX).
+$plugin->version = 2026090308; // The current plugin version (Date: YYYYMMDDXX).
 $plugin->requires  = 2025041410;        // Requires Moodle version 5.0.
 // Tested against Moodle 5.0 through 5.3, including the 5.3dev branch (branches 500-530).
 $plugin->supported = [500, 530];
 $plugin->component = 'gradereport_quizanalytics'; // Full name of the plugin (used for diagnostics).
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '2.4.17 (Build: 2026090306)';
+$plugin->release = '2.4.19 (Build: 2026090308)';
