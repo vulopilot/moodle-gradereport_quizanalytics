@@ -154,7 +154,8 @@ if (!$quizzes) {
                   WHERE state = 'finished' AND sumgrades IS NOT NULL AND attempt = 1 AND quiz = ?",
                 [$quiz->id]
             );
-            $select = '<select class="userSelect"><option value="-1">'
+            $select = '<select class="userSelect" aria-label="'
+                . get_string('student_select', 'gradereport_quizanalytics') . '"><option value="-1">'
                 . get_string('user_select', 'gradereport_quizanalytics') . '</option>';
             foreach ($attemptedusers as $attempteduser) {
                 $select .= '<option value="' . $attempteduser->userid . '">'
@@ -167,9 +168,14 @@ if (!$quizzes) {
         if (count($attemptsnotgraded) == count($attempts)) {
             $row[] = get_string('notgraded', 'gradereport_quizanalytics');
         } else {
+            // The "data-user_id" attribute is only actually used by analytic.js when there is no
+            // .userSelect on the row (i.e. the student's own row) - it lets the student's own
+            // analytics resolve correctly there, the same way it already does on the quiz attempt
+            // review page embed (see hook_callbacks.php). A .userSelect's value always wins.
             $row[] = '<a ' . ($isstudent ? '' : 'style="pointer-events: none; color: #999" ')
                 . 'href="#" id="viewanalytic" class="viewanalytic" data-url="' . $CFG->wwwroot
-                . '" data-quiz_id="' . $quiz->id . '" data-course_id="' . $courseid . '">'
+                . '" data-quiz_id="' . $quiz->id . '" data-course_id="' . $courseid
+                . '" data-user_id="' . $USER->id . '">'
                 . get_string('viewanalytics', 'gradereport_quizanalytics') . '</a>';
         }
         $table->data[] = $row;
